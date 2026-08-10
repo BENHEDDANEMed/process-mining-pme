@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+streamlit.log
+
+# Dataset volumineux : a re-telecharger depuis 4TU Research Data
+data/*.xes
+data/*.parquet
+
+# Modeles entraines : reproductibles via les scripts src/, pas versionnes
+models/*.pnml
+models/*.pkl
+models/*.parquet
+models/*.csv

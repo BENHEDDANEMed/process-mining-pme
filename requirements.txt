@@ -1,0 +1,19 @@
+# Process mining
+# NB: pm4py est sous licence AGPL v3 depuis 2024 - usage commercial
+# non open-source necessite une licence payante (voir README).
+pm4py==2.7.23.3
+
+# Data engineering
+pandas==3.0.5
+
+# Machine learning
+scikit-learn==1.9.0
+xgboost==3.0.5
+
+# Dashboard & visualisation
+streamlit==1.61.1
+plotly==6.9.0
+graphviz==0.21
+
+# Utilitaires
+python-dotenv==1.2.2
