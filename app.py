@@ -297,7 +297,7 @@ def view_live_source() -> None:
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Tickets (cas)", f"{live_kpis['n_cases']:,}")
     col2.metric("Taux de cloture", f"{live_kpis['closure_rate']:.1%}")
-    col3.metric("Duree mediane", f"{live_kpis['median_duration_hours']:.1f} h")
+    col3.metric("Duree mediane", f"{live_kpis['median_case_duration_hours']:.1f} h")
     col4.metric("Variantes", f"{live_kpis['n_variants']}")
 
     st.info(
