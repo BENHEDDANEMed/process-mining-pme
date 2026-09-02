@@ -136,6 +136,19 @@ limite ; le placer dans un fichier `.env` a la racine (non versionne) :
 SOCRATA_APP_TOKEN=xxxxxxxx
 ```
 
+### Poste avec antivirus interceptant le HTTPS (Avast, etc.)
+
+Certains antivirus (Avast notamment) inspectent le trafic HTTPS en generant une autorite
+de certification locale et en re-signant chaque connexion. Si `python -m src.live_source`
+echoue avec une erreur SSL, c'est le cas de figure : exporter le certificat racine de
+l'antivirus (dans Avast : *Menu > Parametres > Confidentialite/Protection > Inspection SSL*
+ou equivalent selon la version) et le placer a la racine du projet sous le nom
+`avast-root.crt`. Ce fichier est propre a chaque machine et volontairement exclu du depot
+(voir `.gitignore`) : personne d'autre n'a besoin du meme fichier, et il ne fonctionnerait
+pas sur un autre poste de toute facon. Sans antivirus de ce type, cette etape ne se
+declenche jamais - `build_session()` (`src/live_source.py`) ne l'utilise qu'en repli, apres
+avoir constate que la connexion standard echoue.
+
 ### Un resultat de qualite de donnees
 
 L'analyse du flux fait apparaitre des variantes chronologiquement incoherentes, du type

@@ -19,3 +19,7 @@ graphviz==0.21
 python-dotenv==1.2.2
 requests==2.34.2
 certifi==2026.7.22
+pyyaml==6.0.3
+
+# Tests
+pytest==9.1.1

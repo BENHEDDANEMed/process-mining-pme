@@ -2,7 +2,7 @@
 # d'architecture du plan de projet.
 #
 # NB licence : pm4py est sous AGPL v3 depuis 2024, usage commercial non open-source
-# necessite une licence payante. Le dataset BPI Challenge 2012 est public (4TU).
+# necessite une licence payante. Le dataset utilise est BPI Challenge 2019 (4TU, public).
 #
 # Les modeles (.pnml, .pkl) sont entraines HORS du conteneur (voir README) et
 # montes en volume : ce conteneur ne fait que les charger pour servir le dashboard.
@@ -12,13 +12,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends graphviz ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Poste de dev local derriere un antivirus (Avast) qui intercepte le trafic HTTPS
-# pour le scanner ; son certificat racine n'est pas connu du conteneur par defaut,
-# ce qui fait echouer `pip install` (SSL: CERTIFICATE_VERIFY_FAILED). On l'ajoute
-# au magasin de certificats du conteneur. Sans antivirus scannant le HTTPS
-# (build en CI, autre machine), ce fichier est simplement ignore.
-COPY avast-root.crt /usr/local/share/ca-certificates/avast-root.crt
-RUN update-ca-certificates
+# Si `pip install` echoue plus bas avec une erreur SSL (CERTIFICATE_VERIFY_FAILED),
+# c'est generalement qu'un antivirus ou un proxy d'entreprise intercepte le trafic
+# HTTPS sur la machine qui construit l'image. Dans ce cas, ajouter ici :
+#   COPY votre-certificat-racine.crt /usr/local/share/ca-certificates/
+#   RUN update-ca-certificates
+# Ce fichier est propre a chaque machine : ne pas le committer dans le depot.
 
 WORKDIR /app
 
