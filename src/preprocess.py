@@ -1,12 +1,10 @@
 """Phase 1 - Nettoyage du journal d'evenements et statistiques descriptives."""
 
-from pathlib import Path
-
 import pandas as pd
 
-from src.extract_log import RAW_EVENT_LOG_PATH, DATA_DIR
+from src.extract_log import RAW_EVENT_LOG_PATH, PROCESSED_DATA_DIR
 
-CLEAN_EVENT_LOG_PATH = DATA_DIR / "event_log_clean.parquet"
+CLEAN_EVENT_LOG_PATH = PROCESSED_DATA_DIR / "event_log_clean.parquet"
 
 CASE_ID_COL = "case:concept:name"
 ACTIVITY_COL = "concept:name"
@@ -15,10 +13,15 @@ LIFECYCLE_COL = "lifecycle:transition"
 
 MIN_EVENTS_PER_CASE = 2
 
+# BPI2019 contient quelques timestamps aberrants (ex: 1948) issus d'erreurs de
+# saisie dans le systeme source ; toute date hors de la periode reelle de
+# collecte du log (2011-2020) est ecartee avant tout calcul de duree.
+MIN_VALID_DATE = pd.Timestamp("2010-01-01", tz="UTC")
+MAX_VALID_DATE = pd.Timestamp("2020-12-31", tz="UTC")
+
 
 def clean_log(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=[CASE_ID_COL, ACTIVITY_COL, TIMESTAMP_COL])
-    df = df.drop_duplicates()
 
     # BPI2012 journalise START/SCHEDULE/COMPLETE pour les activites humaines ;
     # ne garder que les transitions COMPLETE evite de gonfler artificiellement
@@ -27,6 +30,13 @@ def clean_log(df: pd.DataFrame) -> pd.DataFrame:
         df = df[df[LIFECYCLE_COL] == "COMPLETE"].copy()
 
     df[TIMESTAMP_COL] = pd.to_datetime(df[TIMESTAMP_COL], utc=True)
+    df = df[(df[TIMESTAMP_COL] >= MIN_VALID_DATE) & (df[TIMESTAMP_COL] <= MAX_VALID_DATE)]
+
+    # BPI2019 contient ~8% de lignes strictement dupliquees (meme cas, meme
+    # activite, meme timestamp, memes attributs) : probablement des doubles
+    # ecritures dans le systeme source, a retirer avant tout calcul de KPI.
+    df = df.drop_duplicates()
+
     df = df.sort_values([CASE_ID_COL, TIMESTAMP_COL])
 
     case_sizes = df.groupby(CASE_ID_COL)[ACTIVITY_COL].transform("size")

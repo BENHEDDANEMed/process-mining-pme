@@ -1,0 +1,52 @@
+# Configuration du dataset BPI Challenge 2019 (Purchase-to-Pay).
+#
+# Ce fichier decrit COMMENT lire un log d'evenements : quels champs portent
+# l'identifiant de cas, l'activite et l'horodatage, et quelles activites
+# marquent la fin d'un dossier. Le code d'analyse (decouverte, performance,
+# KPI) est lui totalement generique : brancher un nouveau processus consiste
+# a ecrire un fichier comme celui-ci, pas a modifier le code.
+
+name: bpi2019
+label: "Purchase-to-Pay (BPI Challenge 2019)"
+description: >
+  Processus d'achat d'une multinationale : demande d'achat, commande,
+  reception, facturation, paiement. Dataset public fige (4TU.ResearchData).
+
+# Correspondance entre les concepts du process mining et les colonnes du log.
+columns:
+  case_id: "case:concept:name"
+  activity: "concept:name"
+  timestamp: "time:timestamp"
+  resource: "org:resource"
+
+# Activites marquant la cloture reelle d'un dossier. Servent a distinguer les
+# cas termines des cas encore en cours (indispensable pour ne pas biaiser les
+# calculs de duree - voir la correction de censure temporelle dans le README).
+terminal_activities:
+  - "Clear Invoice"
+  - "Delete Purchase Order Item"
+
+# Attributs metier exploitables comme features ou axes d'analyse.
+attributes:
+  amount: "Cumulative net worth (EUR)"
+  categorical:
+    - "case:Vendor"
+    - "case:Item Category"
+    - "case:Document Type"
+    - "case:Spend area text"
+    - "case:Company"
+    - "case:Item Type"
+    - "case:Source"
+    - "case:GR-Based Inv. Verif."
+    - "case:Goods Receipt"
+
+# Parametres d'analyse.
+analysis:
+  # Nombre de variantes conservees pour la decouverte du modele : au-dela,
+  # le graphe devient illisible ("spaghetti model").
+  discovery_top_k_variants: 20
+  # Nombre minimal d'occurrences pour qu'une transition soit consideree
+  # comme un goulot d'etranglement significatif.
+  min_transition_count: 20
+  # Quantile definissant le retard : 0.75 = le quart des cas les plus lents.
+  late_quantile: 0.75

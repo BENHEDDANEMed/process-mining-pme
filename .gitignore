@@ -3,13 +3,31 @@ __pycache__/
 *.pyc
 .pytest_cache/
 streamlit.log
+logs/
 
-# Dataset volumineux : a re-telecharger depuis 4TU Research Data
-data/*.xes
-data/*.parquet
+# Secrets : token d'API Socrata (voir src/live_source.py)
+.env
+
+# Bundle de certificats genere localement (interception SSL du poste)
+certs/
+
+# Datasets volumineux : a re-telecharger / regenerer via les scripts src/
+data/raw/*.xes
+data/processed/*.parquet
+data/live/*.parquet
+data/live/*.json
+data/live/*.pnml
+data/legacy_bpi2012/
 
 # Modeles entraines : reproductibles via les scripts src/, pas versionnes
 models/*.pnml
 models/*.pkl
 models/*.parquet
 models/*.csv
+models/*.json
+models/*.png
+
+# Exports generes (volumineux) : regenerables via src/export_powerbi.py
+powerbi_export/*.csv
+powerbi_export.zip
+avast-root.crt

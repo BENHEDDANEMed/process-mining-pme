@@ -17,3 +17,5 @@ graphviz==0.21
 
 # Utilitaires
 python-dotenv==1.2.2
+requests==2.34.2
+certifi==2026.7.22
