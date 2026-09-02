@@ -268,7 +268,8 @@ process-mining-pme-v2/
 │   ├── business_analysis.py     # Phase 3 - KPI + recommandations metier
 │   ├── train_model.py           # Phase 4 - feature engineering + XGBoost x2
 │   ├── evaluate_model.py        # Phase 4 - metriques des 2 modeles
-│   ├── export_powerbi.py        # Phase 5 - export CSV pour Power BI
+│   ├── export_powerbi.py        # Phase 5 - export CSV pour Power BI (BPI2019)
+│   ├── export_powerbi_live.py   # Phase 5 - export CSV pour Power BI (NYC 311)
 │   ├── live_source.py           # Volet API - ingestion du flux NYC 311
 │   └── live_analysis.py         # Volet API - process mining sur le flux
 ├── powerbi_export/              # Tables CSV + README d'import Power BI
@@ -306,6 +307,19 @@ python -m src.export_powerbi
 Puis, dans Power BI Desktop : *Obtenir les donnees > Texte/CSV* pour chaque fichier de
 `powerbi_export/`. Le detail des tables, des relations a creer et des visuels suggeres
 est dans `powerbi_export/README.md`.
+
+Meme export pour le flux vivant NYC 311 (necessite d'avoir execute `src.live_source`
+au moins une fois) :
+
+```bash
+python -m src.export_powerbi_live
+```
+
+Produit `powerbi_export_live/` : `fact_cases.csv`, `dim_bottlenecks.csv`, `dim_rework.csv`,
+`dim_resources.csv`, `dim_variants.csv`, `kpi_overview.csv`. Contrairement a
+`export_powerbi.py` (specifique a BPI2019 : attributs Purchase-to-Pay, predictions ML),
+ce script appelle directement `src/process_metrics.py` avec `config/nyc311.yaml` - aucune
+metrique n'est reimplementee, seule la configuration change.
 
 Audit prealable d'un dataset (optionnel, deja execute pour BPI2012 et BPI2019) :
 

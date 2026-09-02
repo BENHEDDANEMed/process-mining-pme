@@ -29,5 +29,6 @@ models/*.png
 
 # Exports generes (volumineux) : regenerables via src/export_powerbi.py
 powerbi_export/*.csv
+powerbi_export_live/*.csv
 powerbi_export.zip
 avast-root.crt
