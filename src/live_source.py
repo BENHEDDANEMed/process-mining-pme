@@ -55,6 +55,11 @@ APP_TOKEN = os.getenv("SOCRATA_APP_TOKEN")
 # throttling de Socrata.
 DEFAULT_FETCH_LIMIT = 20_000
 
+# Fenetre glissante explicite plutot qu'un "top N" arbitraire : le volume
+# reellement couvert dependait sinon du rythme de creation de tickets le
+# jour de l'appel (quelques heures un jour charge, plusieurs jours sinon).
+DEFAULT_WINDOW_DAYS = 14
+
 CASE_ID_COL = "case_id"
 ACTIVITY_COL = "activity"
 TIMESTAMP_COL = "timestamp"
@@ -130,15 +135,36 @@ def build_session() -> requests.Session:
     return session
 
 
-def fetch_recent_tickets(limit: int = DEFAULT_FETCH_LIMIT, session: requests.Session | None = None) -> pd.DataFrame:
-    """Recupere un instantane des tickets 311 les plus recents.
+def fetch_recent_tickets(
+    limit: int = DEFAULT_FETCH_LIMIT,
+    days: int = DEFAULT_WINDOW_DAYS,
+    session: requests.Session | None = None,
+) -> pd.DataFrame:
+    """Recupere les tickets 311 crees dans les `days` derniers jours.
 
-    Chaque appel renvoie l'etat courant des tickets recents : relancer ce script
-    a des heures differentes retourne des tickets differents, ce qui est la
-    demonstration recherchee (donnee "renouvelable" vs dataset fige).
+    Chaque appel renvoie l'etat courant des tickets de cette fenetre : relancer
+    ce script a des heures differentes retourne des tickets differents, ce qui
+    est la demonstration recherchee (donnee "renouvelable" vs dataset fige).
+
+    Le filtre porte uniquement sur `created_date`, PAS sur le statut : les
+    tickets encore ouverts restent inclus. Un filtre `closed_date IS NOT NULL`
+    donnerait des durees de traitement plus propres (aucun cas tronque), mais
+    rendrait le taux de cloture trivialement egal a 100% - KPI affiche partout
+    dans le dashboard - puisqu'on aurait exclu par construction tout ce qui
+    n'est pas cloture. `src/process_metrics.py` (closed_cases/completed_cases)
+    gere deja cette distinction en aval, sur le flux complet.
     """
     session = session or build_session()
-    params = {"$limit": limit, "$order": "created_date DESC"}
+
+    # Socrata attend un timestamp "flottant" (sans fuseau horaire) pour les
+    # comparaisons SoQL sur created_date, au format ISO 8601 simple - un
+    # timestamp avec fuseau y declenche une erreur 400.
+    since = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days)).tz_localize(None)
+    params = {
+        "$limit": limit,
+        "$order": "created_date DESC",
+        "$where": f"created_date > '{since.strftime('%Y-%m-%dT%H:%M:%S')}'",
+    }
     headers = {"X-App-Token": APP_TOKEN} if APP_TOKEN else {}
 
     resp = session.get(NYC311_ENDPOINT, params=params, headers=headers, timeout=60)
@@ -154,6 +180,17 @@ def to_event_log(raw: pd.DataFrame) -> pd.DataFrame:
     Le dataset 311 n'expose pas l'historique complet des changements de statut,
     mais trois jalons fiables et horodates suffisent a un process mining
     minimal : creation, mise a jour de l'action de resolution, cloture.
+
+    `resolution_action_updated_date` est un horodatage de derniere
+    modification, pas une etape garantie du cycle de vie : sur un instantane
+    verifie le 2026-09-02, 31% de ses valeurs precedaient la creation meme du
+    ticket - on ecarte ces cas, sinon ils produiraient des variantes
+    incoherentes du type "Resolution Action Updated -> Service Request
+    Created". A l'inverse, le voir survenir quelques secondes APRES
+    closed_date est normal (memes 8700 cas verifies a la seconde pres) : les
+    deux champs sont horodates par des etapes distinctes d'une meme
+    transaction de cloture cote NYC, pas par des evenements successifs -
+    aucune borne superieure n'est donc imposee contre closed_date.
     """
     date_cols = ["created_date", "resolution_action_updated_date", "closed_date", "due_date"]
     for col in date_cols:
@@ -175,7 +212,19 @@ def to_event_log(raw: pd.DataFrame) -> pd.DataFrame:
     for date_col, activity in milestones:
         if date_col not in raw.columns:
             continue
-        part = raw[raw[date_col].notna()][["unique_key", date_col] + keep_attrs].copy()
+
+        valid = raw[date_col].notna()
+        if date_col == "resolution_action_updated_date" and "created_date" in raw.columns:
+            n_before = int(valid.sum())
+            valid &= raw["created_date"] < raw[date_col]
+            n_dropped = n_before - int(valid.sum())
+            if n_dropped:
+                print(
+                    f"Resolution Action Updated : {n_dropped}/{n_before} evenements ecartes "
+                    "(horodatage anterieur a la creation du ticket)"
+                )
+
+        part = raw[valid][["unique_key", date_col] + keep_attrs].copy()
         part[ACTIVITY_COL] = activity
         part = part.rename(columns={"unique_key": CASE_ID_COL, date_col: TIMESTAMP_COL})
         events.append(part)

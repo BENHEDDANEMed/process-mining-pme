@@ -149,12 +149,25 @@ pas sur un autre poste de toute facon. Sans antivirus de ce type, cette etape ne
 declenche jamais - `build_session()` (`src/live_source.py`) ne l'utilise qu'en repli, apres
 avoir constate que la connexion standard echoue.
 
+### Fenetre de recuperation
+
+`python -m src.live_source` recupere les tickets crees dans les 14 derniers jours
+(`DEFAULT_WINDOW_DAYS`), plafonnes a 20 000 (`DEFAULT_FETCH_LIMIT`) - une fenetre
+temporelle explicite plutot qu'un "top N" dont le volume reel depend du rythme de
+creation de tickets le jour de l'appel. Contrairement a un filtre qui ne garderait que
+les tickets deja clotures, les tickets encore ouverts restent inclus : c'est ce qui
+permet au taux de cloture (`closure_rate`) de rester un KPI significatif plutot que
+trivialement egal a 100%.
+
 ### Un resultat de qualite de donnees
 
-L'analyse du flux fait apparaitre des variantes chronologiquement incoherentes, du type
-`Resolution Action Updated -> Service Request Created`. En cause : le champ
-`resolution_action_updated_date` de l'API est un horodatage de **derniere modification**,
-qui ne suit donc pas l'ordre logique du cycle de vie. C'est un resultat en soi - le
+Le champ `resolution_action_updated_date` de l'API est un horodatage de **derniere
+modification**, pas une etape garantie du cycle de vie : sur un instantane verifie le
+2026-09-02, 31% de ses valeurs precedaient la creation meme du ticket. `to_event_log()`
+(`src/live_source.py`) ecarte desormais ces evenements plutot que de produire des
+variantes incoherentes du type `Resolution Action Updated -> Service Request Created`.
+Le voir survenir quelques secondes *apres* `closed_date` reste en revanche normal (memes
+transaction de cloture cote NYC) et n'est pas filtre. C'est un resultat en soi - le
 process mining rend visible un defaut de qualite de donnees qu'un tableau de bord agrege
 classique masquerait entierement.
 
