@@ -42,10 +42,11 @@ STEPS = {
     "full": [
         ("src.live_source", "Appel de l'API et construction du log d'evenements"),
         ("src.live_analysis", "Process mining sur le flux vivant"),
+        ("src.export_powerbi_live", "Export des tables Power BI (flux vivant)"),
         ("src.conformance_check", "Verification de conformite"),
         ("src.performance_analysis", "Analyse de performance"),
         ("src.business_analysis", "KPI et recommandations metier"),
-        ("src.export_powerbi", "Export des tables Power BI"),
+        ("src.export_powerbi", "Export des tables Power BI (BPI2019)"),
     ],
 }
 

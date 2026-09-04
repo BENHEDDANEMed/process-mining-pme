@@ -216,7 +216,7 @@ execution dans `logs/refresh.log` :
 
 ```bash
 python -m src.refresh                # flux API + analyse du flux (rapide)
-python -m src.refresh --scope full   # + conformite, performance, KPI, export Power BI
+python -m src.refresh --scope full   # + export Power BI (NYC), conformite, performance, KPI, export Power BI (BPI2019)
 ```
 
 Planification quotidienne sous Windows :
@@ -260,14 +260,17 @@ process-mining-pme-v2/
 ├── reports/
 │   ├── dataset_audit_bpi2012.md
 │   ├── dataset_audit_bpi2019.md
-│   └── process_analysis.md      # KPI + recommandations metier
+│   ├── process_analysis.md      # KPI + recommandations metier (BPI2019)
+│   └── live_process_analysis.md # KPI + variantes du flux vivant (NYC 311)
 ├── config/                      # Un fichier YAML = un processus analysable
 │   ├── bpi2019.yaml
 │   └── nyc311.yaml
 ├── tests/                       # 36 tests pytest
 ├── scripts/
-.\scripts\register_refresh_task.ps1
+│   └── register_refresh_task.ps1  # Planification quotidienne (Windows)
 ├── logs/                        # Journal des rafraichissements
+├── .streamlit/
+│   └── config.toml              # Theme du dashboard
 ├── src/
 │   ├── config.py                # Chargement de la configuration d'un processus
 │   ├── process_metrics.py       # Metriques process mining, independantes du dataset
@@ -285,7 +288,8 @@ process-mining-pme-v2/
 │   ├── export_powerbi_live.py   # Phase 5 - export CSV pour Power BI (NYC 311)
 │   ├── live_source.py           # Volet API - ingestion du flux NYC 311
 │   └── live_analysis.py         # Volet API - process mining sur le flux
-├── powerbi_export/              # Tables CSV + README d'import Power BI
+├── powerbi_export/              # Tables CSV + README d'import Power BI (BPI2019)
+├── powerbi_export_live/         # Tables CSV pour Power BI (NYC 311)
 ├── app.py                       # Phase 5 - dashboard Streamlit (6 vues)
 ├── requirements.txt
 ├── Dockerfile
