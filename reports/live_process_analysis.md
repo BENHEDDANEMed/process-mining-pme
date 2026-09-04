@@ -8,43 +8,43 @@ Les indicateurs ci-dessous sont calcules par les memes fonctions que l'analyse
 principale (`src/process_metrics.py`) : seule la configuration change.
 
 ## Instantane analyse
-- Evenements : 11,001
-- Cas (tickets) : 5,000
-- Periode couverte : 2026-05-22 13:59 -> 2026-08-31 12:00
-- Taux de cloture a l'instant T : 54.5% (2,723 tickets clotures)
+- Evenements : 45,799
+- Cas (tickets) : 20,000
+- Periode couverte : 2023-09-13 11:47 -> 2026-09-02 12:00
+- Taux de cloture a l'instant T : 51.6% (10,311 tickets clotures)
 
 ## Delais de traitement
-- Duree mediane : 0.4 h
-- Duree moyenne : 3.3 h
-- 90e percentile : 15.1 h
+- Duree mediane : 1.9 h
+- Duree moyenne : 12.9 h
+- 90e percentile : 18.1 h
 
 ## Modele de processus decouvert
 - Places : 8 | Transitions : 7 | Arcs : 18
 - Nombre de variantes observees : 7
 
 ### Variantes les plus frequentes
-- (2614 cas) Service Request Created -> Service Request Closed -> Resolution Action Updated
-- (1722 cas) Service Request Created
-- (475 cas) Resolution Action Updated -> Service Request Created
-- (80 cas) Service Request Created -> Resolution Action Updated
-- (72 cas) Resolution Action Updated -> Service Request Created -> Service Request Closed
+- (8698 cas) Service Request Created -> Service Request Closed -> Resolution Action Updated
+- (4512 cas) Service Request Created
+- (4138 cas) Resolution Action Updated -> Service Request Created
+- (1039 cas) Service Request Created -> Resolution Action Updated
+- (936 cas) Service Request Created -> Resolution Action Updated -> Service Request Closed
 
 ## Goulots d'etranglement (attente moyenne entre etapes)
-- Resolution Action Updated -> Service Request Created : 22.6 h (547 occurrences)
-- Service Request Created -> Service Request Closed : 1.4 h (2686 occurrences)
-- Service Request Created -> Resolution Action Updated : 1.1 h (117 occurrences)
-- Service Request Closed -> Resolution Action Updated : 0.1 h (2614 occurrences)
-- Resolution Action Updated -> Service Request Closed : 0.0 h (36 occurrences)
+- Resolution Action Updated -> Service Request Created : 41.3 h (4805 occurrences)
+- Service Request Created -> Resolution Action Updated : 10.6 h (1985 occurrences)
+- Service Request Created -> Service Request Closed : 3.3 h (9365 occurrences)
+- Resolution Action Updated -> Service Request Closed : 2.3 h (936 occurrences)
+- Service Request Closed -> Resolution Action Updated : 0.7 h (8698 occurrences)
 
 ## Types de reclamation les plus lents (>= 20 cas)
-- HEAT/HOT WATER : mediane 19.4 h (25 cas)
-- ELECTRIC : mediane 19.1 h (34 cas)
-- GENERAL : mediane 19.0 h (28 cas)
-- PLUMBING : mediane 18.8 h (58 cas)
-- UNSANITARY CONDITION : mediane 18.1 h (141 cas)
-- DOOR/WINDOW : mediane 17.4 h (47 cas)
-- WATER LEAK : mediane 17.2 h (45 cas)
-- FLOORING/STAIRS : mediane 17.2 h (21 cas)
+- HEAT/HOT WATER : mediane 16.0 h (251 cas)
+- Derelict Vehicles : mediane 15.9 h (115 cas)
+- Building/Use : mediane 14.4 h (150 cas)
+- Dead Animal : mediane 14.3 h (53 cas)
+- WATER LEAK : mediane 14.3 h (383 cas)
+- PLUMBING : mediane 13.9 h (513 cas)
+- SAFETY : mediane 13.9 h (87 cas)
+- UNSANITARY CONDITION : mediane 13.7 h (1134 cas)
 
 ## Interet pour une PME
 

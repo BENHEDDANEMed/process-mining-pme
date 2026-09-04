@@ -47,6 +47,14 @@ COMBINED_BUNDLE = CERTS_DIR / "ca_bundle.pem"
 NYC311_ENDPOINT = "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
 APP_TOKEN = os.getenv("SOCRATA_APP_TOKEN")
 
+# 20 000 tickets couvrent plusieurs jours d'activite (contre quelques heures a
+# 5 000) et font apparaitre des categories de reclamation plus rares (voir
+# reports/live_process_analysis.md). Confirme fonctionner sans APP_TOKEN en
+# ~10s pour un appel isole ; le token reste utile en cas d'appels frequents
+# et repetes (ex. via le rafraichissement quotidien), pour eviter le
+# throttling de Socrata.
+DEFAULT_FETCH_LIMIT = 20_000
+
 CASE_ID_COL = "case_id"
 ACTIVITY_COL = "activity"
 TIMESTAMP_COL = "timestamp"
@@ -122,7 +130,7 @@ def build_session() -> requests.Session:
     return session
 
 
-def fetch_recent_tickets(limit: int = 5000, session: requests.Session | None = None) -> pd.DataFrame:
+def fetch_recent_tickets(limit: int = DEFAULT_FETCH_LIMIT, session: requests.Session | None = None) -> pd.DataFrame:
     """Recupere un instantane des tickets 311 les plus recents.
 
     Chaque appel renvoie l'etat courant des tickets recents : relancer ce script
