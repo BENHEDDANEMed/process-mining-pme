@@ -20,6 +20,8 @@ Permet de :
 4. Traduire ces mesures en KPI et recommandations metier exploitables (Business Analysis).
 5. Predire, pour un dossier en cours : son risque de retard et le temps restant avant
    cloture, via deux modeles XGBoost.
+6. Resumer toutes ces analyses en un **Process Health Score** unique (0-100), lisible
+   sans connaissance du process mining.
 
 ## Stack technique
 
@@ -235,6 +237,46 @@ n'a pas a etre refait a chaque rafraichissement. Le relancer manuellement lors d
 reevaluation periodique - c'est aussi l'occasion de verifier que le seuil de retard et
 la fenetre de censure restent pertinents sur les donnees recentes.
 
+## Process Health Score
+
+Toutes les analyses precedentes se resument en **un score unique de 0 a 100** et un
+statut (EXCELLENT / GOOD / WARNING / CRITICAL), affiche en tete de la vue d'ensemble.
+C'est une couche de **synthese**, pas de calcul : `src/process_health.py` relit les KPI
+deja produits, il n'en recalcule aucun.
+
+```bash
+python -m src.process_health                    # processus par defaut
+python -m src.process_health --config nyc311 --kpis data/live/live_kpi_summary.json
+```
+
+| Dimension | Mesure | Poids |
+|---|---|---|
+| Performance | rapport p90 / mediane des durees (regularite) | 25% |
+| Conformance | taux de deviation au modele decouvert | 25% |
+| Risque de retard | part des cas signales par le classifieur | 20% |
+| Rework | taux de rework moyen | 15% |
+| Charge ressources | part des evenements de la ressource la plus chargee | 15% |
+
+**Des metriques sans echelle.** Un dossier BPI2019 dure 64 jours en mediane, un ticket
+NYC 311 neuf minutes : aucun seuil en heures ne peut servir les deux. Chaque dimension
+est donc un *ratio*, ce qui rend le score comparable d'un processus a l'autre.
+
+**Dimensions manquantes.** Une dimension dont le KPI source est absent est ecartee -
+jamais remplacee par une valeur inventee - et les poids restants sont renormalises a 1.
+Le flux NYC 311 l'illustre : sans conformance checking ni modele de prediction, son
+score porte sur trois dimensions, avec des poids ramenes de 0.55 a 1. Le chemin des
+predictions vient du YAML (`artifacts.predictions`) et non d'une constante, pour qu'un
+processus sans modele n'herite pas des predictions d'un autre dataset.
+
+Les poids et les seuils sont configurables par processus dans `config/*.yaml`. Le detail
+complet (normalisation, justification des poids, limites) est dans
+`PROJECT_DOCUMENTATION.md`, section 8.
+
+**Limite assumee** : le rapport p90/mediane mesure la *regularite* des durees, pas la
+vitesse absolue - un processus uniformement lent mais previsible obtient un bon score
+sur cette dimension. Juger la vitesse absolue exigerait un objectif de delai (SLA) que
+la plateforme ne connait pas, et l'inventer reviendrait a fabriquer une valeur.
+
 ## Structure
 
 ```
@@ -274,6 +316,7 @@ process-mining-pme-v2/
 ├── src/
 │   ├── config.py                # Chargement de la configuration d'un processus
 │   ├── process_metrics.py       # Metriques process mining, independantes du dataset
+│   ├── process_health.py        # Process Health Score (synthese des KPI existants)
 │   ├── refresh.py               # Orchestrateur des etapes periodiques
 │   ├── audit_dataset.py         # Audit generique d'un event log XES
 │   ├── extract_log.py           # Phase 1 - XES -> DataFrame
@@ -357,7 +400,8 @@ Dashboard accessible sur http://localhost:8501.
 
 ## Dashboard (6 vues)
 
-1. **Vue d'ensemble** : KPI principaux, distribution des durees, activites frequentes.
+1. **Vue d'ensemble** : Process Health Score, KPI principaux, distribution des durees,
+   activites frequentes.
 2. **Processus** : modele decouvert (Inductive Miner), top variantes.
 3. **Conformite & Performance** : fitness/precision, cas deviants, goulots d'etranglement,
    rework, charge par ressource.

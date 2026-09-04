@@ -25,7 +25,8 @@ import pm4py
 from src.config import load_config
 from src.live_source import EVENT_LOG_PATH
 from src.process_metrics import (
-    bottlenecks, case_durations_hours, case_variants, summarize,
+    bottlenecks, case_durations_hours, case_variants, resource_load,
+    rework_rates, summarize,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -102,7 +103,31 @@ def compute_kpis(df: pd.DataFrame, cfg) -> dict:
         ],
         "slowest_complaint_types": slowest_categories(df, cfg),
     })
+    kpis.update(_rework_and_resource_kpis(df, cfg))
     return kpis
+
+
+def _rework_and_resource_kpis(df: pd.DataFrame, cfg) -> dict:
+    """Rework et charge des ressources, au meme format que business_analysis.
+
+    Ces deux KPI viennent des memes fonctions generiques que l'analyse
+    principale ; les exposer ici permet au Process Health Score de noter le
+    flux vivant sur trois dimensions au lieu d'une seule.
+    """
+    rework = rework_rates(df, cfg)
+    resources = resource_load(df, cfg)
+
+    return {
+        "overall_rework_rate": float(rework["rework_rate"].mean()) if len(rework) else 0.0,
+        "top_rework_activities": [
+            {"activity": row["activity"], "rework_rate": round(float(row["rework_rate"]), 4)}
+            for _, row in rework.head(TOP_N).iterrows()
+        ],
+        "top_resources": [
+            {"resource": row["resource"], "n_events": int(row["n_events"])}
+            for _, row in resources.head(TOP_N).iterrows()
+        ],
+    }
 
 
 def format_report(kpis: dict, net_stats: dict) -> str:

@@ -38,6 +38,32 @@ class AnalysisParams:
 
 
 @dataclass(frozen=True)
+class HealthWeights:
+    """Poids des dimensions du Process Health Score, avant renormalisation.
+
+    Performance et conformite pesent le plus : ce sont les deux piliers du
+    process mining, mesures directement sur le log complet. Le risque de retard
+    vient d'un modele predictif (donc d'une estimation, pas d'une mesure) et
+    pese un cran en dessous. Rework et charge des ressources sont des signaux
+    de diagnostic secondaires - utiles pour expliquer un probleme, rarement
+    suffisants pour le qualifier a eux seuls.
+
+    Les poids des seules dimensions disponibles sont renormalises a la somme 1
+    par `src/process_health.py` : un processus sans conformance checking reste
+    donc note sur 100.
+    """
+
+    performance: float = 0.25
+    conformance: float = 0.25
+    delay_risk: float = 0.20
+    rework: float = 0.15
+    resource_load: float = 0.15
+
+    def as_dict(self) -> dict[str, float]:
+        return {name: float(getattr(self, name)) for name in self.__dataclass_fields__}
+
+
+@dataclass(frozen=True)
 class ProcessConfig:
     """Description complete d'un processus analysable."""
 
@@ -52,8 +78,14 @@ class ProcessConfig:
 
     terminal_activities: list[str]
     amount_column: str | None
+    # Sortie du modele de prediction propre a CE processus, si un modele a ete
+    # entraine dessus. Renseigne dans le YAML plutot que code en dur : sans
+    # cela, un processus sans modele (comme le flux NYC 311) se verrait
+    # attribuer les predictions d'un autre dataset.
+    predictions_path: str | None = None
     categorical_attributes: list[str] = field(default_factory=list)
     analysis: AnalysisParams = field(default_factory=AnalysisParams)
+    health_weights: HealthWeights = field(default_factory=HealthWeights)
 
     @property
     def core_columns(self) -> list[str]:
@@ -106,6 +138,15 @@ def _from_dict(raw: dict, source: Path | None = None) -> ProcessConfig:
             f"{sorted(unknown)}. Attendus : {sorted(known)}."
         )
 
+    weights_raw = (raw.get("health_score") or {}).get("weights") or {}
+    known_weights = {f for f in HealthWeights.__dataclass_fields__}
+    unknown_weights = set(weights_raw) - known_weights
+    if unknown_weights:
+        raise ValueError(
+            f"Configuration invalide{origin} : dimension(s) de health_score inconnue(s) "
+            f"{sorted(unknown_weights)}. Attendues : {sorted(known_weights)}."
+        )
+
     return ProcessConfig(
         name=raw.get("name", source.stem if source else "sans-nom"),
         label=raw.get("label", raw.get("name", "")),
@@ -116,6 +157,8 @@ def _from_dict(raw: dict, source: Path | None = None) -> ProcessConfig:
         resource=columns.get("resource"),
         terminal_activities=list(raw.get("terminal_activities") or []),
         amount_column=attributes.get("amount"),
+        predictions_path=(raw.get("artifacts") or {}).get("predictions"),
         categorical_attributes=list(attributes.get("categorical") or []),
         analysis=AnalysisParams(**analysis_raw),
+        health_weights=HealthWeights(**weights_raw),
     )

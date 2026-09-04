@@ -14,6 +14,11 @@ import plotly.express as px
 import pm4py
 import streamlit as st
 
+from src.config import DEFAULT_CONFIG, load_config
+from src.process_health import (
+    DIMENSIONS, calculate_process_health, load_delay_risk_rate,
+)
+
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data" / "processed"
 MODELS_DIR = BASE_DIR / "models"
@@ -74,6 +79,13 @@ def load_live_log() -> pd.DataFrame | None:
     return df
 
 
+@st.cache_data
+def load_process_health(kpis: dict) -> dict:
+    """Synthese des KPI deja calcules : aucun recalcul de process mining ici."""
+    cfg = load_config(DEFAULT_CONFIG)
+    return calculate_process_health(kpis, cfg, load_delay_risk_rate(cfg))
+
+
 @st.cache_resource
 def load_petri_net():
     return pm4py.read_pnml(str(MODELS_DIR / "process_model.pnml"))
@@ -89,8 +101,86 @@ def load_regressor():
     return joblib.load(MODELS_DIR / "xgboost_regressor.pkl")
 
 
+# Couleur du statut : semantique (vert = sain, ambre = vigilance, rouge =
+# critique), distincte de l'accent ambre du theme.
+STATUS_COLORS = {
+    "EXCELLENT": "#2e7d6b",
+    "GOOD": "#2e7d6b",
+    "WARNING": "#b3791f",
+    "CRITICAL": "#a83232",
+    "UNKNOWN": "#7c8a99",
+}
+
+
+def render_process_health(health: dict, kpis: dict) -> None:
+    """Synthese decisionnelle : un score unique, ses composantes, sa lecture."""
+    st.subheader("Process Health")
+    st.caption(
+        "Synthese des analyses des autres onglets en un score unique. "
+        "Une dimension non disponible pour ce processus est exclue du calcul, "
+        "et les poids des autres sont renormalises."
+    )
+
+    if health["overall_score"] is None:
+        st.warning(health["interpretation"])
+        return
+
+    couleur = STATUS_COLORS.get(health["status"], STATUS_COLORS["UNKNOWN"])
+    col_score, col_detail = st.columns([1, 2.5])
+
+    with col_score:
+        st.markdown(
+            f"<div style='text-align:center;padding:18px 8px;border:1px solid {couleur};"
+            f"border-radius:10px'>"
+            f"<div style='font-size:2.8rem;font-weight:700;color:{couleur};"
+            f"line-height:1.1'>{health['overall_score']:.0f}<span style='font-size:1.2rem;"
+            f"font-weight:400'> / 100</span></div>"
+            f"<div style='font-size:1rem;font-weight:700;letter-spacing:.08em;"
+            f"color:{couleur}'>{health['status']}</div></div>",
+            unsafe_allow_html=True,
+        )
+
+    with col_detail:
+        disponibles = [d for d in DIMENSIONS if health["scores"][d] is not None]
+        if disponibles:
+            sous_scores = pd.DataFrame({
+                "dimension": [health["labels"][d] for d in disponibles],
+                "score": [health["scores"][d] for d in disponibles],
+            })
+            fig = px.bar(sous_scores, x="score", y="dimension", orientation="h", range_x=[0, 100])
+            fig.update_traces(marker_color=couleur, hovertemplate="%{y} : %{x:.0f}/100<extra></extra>")
+            fig.update_layout(
+                xaxis_title="", yaxis_title="", height=210,
+                margin={"l": 0, "r": 0, "t": 6, "b": 0},
+                yaxis={"categoryorder": "total ascending"},
+            )
+            st.plotly_chart(fig, width="stretch")
+
+    col_faible, col_fort = st.columns(2)
+    col_faible.metric("Point faible", health["main_weakness"] or "-")
+    col_fort.metric("Point fort", health["main_strength"] or "-")
+
+    st.info(health["interpretation"])
+
+    # Rattache la faiblesse aux recommandations deja produites par
+    # business_analysis plutot que d'en generer de nouvelles.
+    recommandations = kpis.get("recommendations") or []
+    if recommandations:
+        with st.expander("Recommandation associee (Business Analysis)"):
+            for reco in recommandations:
+                st.write(f"- {reco}")
+
+    if health["missing_dimensions"]:
+        absentes = ", ".join(health["labels"][d] for d in health["missing_dimensions"])
+        st.caption(f"Non disponible pour ce processus : {absentes}.")
+
+    st.divider()
+
+
 def view_overview(df: pd.DataFrame, kpis: dict) -> None:
     st.header("Vue d'ensemble")
+
+    render_process_health(load_process_health(kpis), kpis)
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Nombre de cas", f"{kpis['n_cases']:,}")

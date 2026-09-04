@@ -25,6 +25,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ src/
+# Le dashboard charge la configuration du processus (via src/config.py) pour
+# calculer le Process Health Score : config/ doit donc etre dans l'image.
+COPY config/ config/
 COPY app.py .
 
 EXPOSE 8501

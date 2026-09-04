@@ -50,3 +50,24 @@ analysis:
   min_transition_count: 20
   # Quantile definissant le retard : 0.75 = le quart des cas les plus lents.
   late_quantile: 0.75
+
+# Ponderation du Process Health Score (src/process_health.py).
+# Performance et conformite sont mesurees directement sur le log complet, d'ou
+# leur poids dominant ; le risque de retard vient d'une prediction ; rework et
+# charge des ressources sont des signaux de diagnostic secondaires.
+# Les dimensions indisponibles sont exclues et les poids restants renormalises.
+health_score:
+  weights:
+    performance: 0.25
+    conformance: 0.25
+    delay_risk: 0.20
+    rework: 0.15
+    resource_load: 0.15
+
+# Sorties propres a ce processus, consommees par le Process Health Score.
+artifacts:
+  # Predictions du classifieur de risque de retard (src/export_powerbi.py).
+  # Un processus sans modele entraine omet simplement cette cle : la dimension
+  # "risque de retard" est alors ecartee du score au lieu d'emprunter les
+  # predictions d'un autre dataset.
+  predictions: powerbi_export/fact_case_predictions.csv
