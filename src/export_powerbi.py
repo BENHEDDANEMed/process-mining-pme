@@ -25,6 +25,7 @@ import pandas as pd
 from src.preprocess import CLEAN_EVENT_LOG_PATH, CASE_ID_COL, ACTIVITY_COL, TIMESTAMP_COL
 from src.performance_analysis import RESOURCE_COL
 from src.business_analysis import CONFORMANCE_REPORT_PATH, KPI_SUMMARY_PATH
+from src.risk_monitoring import mid_progress_rows
 from src.train_model import (
     MODELS_DIR, VENDOR_COL, ITEM_CATEGORY_COL, DOC_TYPE_COL, SPEND_CLASS_COL, AMOUNT_COL,
     CLASSIFIER_PATH, REGRESSOR_PATH, PREFIX_DATASET_PATH,
@@ -69,23 +70,12 @@ def export_fact_cases(df: pd.DataFrame) -> pd.DataFrame:
 
 def export_case_predictions() -> None:
     prefix_df = pd.read_parquet(PREFIX_DATASET_PATH)
-
-    # Prend l'etat "mi-parcours" de chaque cas echantillonne : plus informatif
-    # pour comparer prediction vs realite qu'une prediction en tout debut ou
-    # tout fin de cas (ou il ne reste presque plus rien a predire).
-    case_size = prefix_df.groupby("case_id")["prefix_length"].transform("max")
-    prefix_df["progress_pct"] = prefix_df["prefix_length"] / (case_size + 1)
-    mid_rows = (
-        prefix_df.assign(dist=(prefix_df["progress_pct"] - 0.5).abs())
-        .sort_values("dist")
-        .groupby("case_id")
-        .first()
-        .reset_index()
-    )
+    mid_rows = mid_progress_rows(prefix_df)
 
     # Le jeu de features est enregistre avec le modele a l'entrainement.
     clf_bundle = joblib.load(CLASSIFIER_PATH)
     pipeline, classes = clf_bundle["pipeline"], clf_bundle["classes"]
+    decision_threshold = clf_bundle.get("decision_threshold", 0.5)
     X = mid_rows[clf_bundle["feature_cols"]]
     late_idx = classes.index("LATE") if "LATE" in classes else 0
     proba = pipeline.predict_proba(X)[:, late_idx]
@@ -101,7 +91,10 @@ def export_case_predictions() -> None:
     ]].copy()
     out = out.rename(columns={"outcome": "actual_label", "remaining_hours": "actual_remaining_hours"})
     out["predicted_late_probability"] = proba
-    out["predicted_label"] = np.where(proba >= 0.5, "LATE", "ON_TIME")
+    # Meme seuil que /api/prediction/{case_id}/{step} (bundle["decision_threshold"],
+    # appris par validation - voir src/train_model.py) plutot qu'un 0.5 fixe,
+    # pour rester coherent avec la prediction "live" servie par l'API.
+    out["predicted_label"] = np.where(proba >= decision_threshold, "LATE", "ON_TIME")
     out["predicted_remaining_hours"] = pred_remaining_hours
 
     out.to_csv(EXPORT_DIR / "fact_case_predictions.csv", index=False)

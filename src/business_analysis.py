@@ -14,7 +14,6 @@ Produit :
 
 Usage :
     python -m src.business_analysis
-    python -m src.business_analysis --config nyc311
 """
 
 from __future__ import annotations

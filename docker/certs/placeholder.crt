@@ -1,0 +1,14 @@
+# Fichier volontairement vide de tout certificat.
+#
+# Le Dockerfile execute `COPY docker/certs/*.crt`, qui echouerait si ce dossier
+# ne contenait aucun fichier .crt. Ce placeholder garantit que le build
+# fonctionne sur une machine standard, sans certificat d'entreprise.
+#
+# Si le build echoue avec une erreur SSL (CERTIFICATE_VERIFY_FAILED), c'est
+# generalement qu'un antivirus ou un proxy d'entreprise intercepte le trafic
+# HTTPS de la machine qui construit l'image. Dans ce cas, exporter le
+# certificat racine de cet outil et le deposer ici (n'importe quel nom en
+# .crt) : il sera installe automatiquement au build.
+#
+# Les certificats reels sont ignores par git (voir .gitignore) car ils sont
+# propres a chaque machine.

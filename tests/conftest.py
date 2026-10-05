@@ -1,8 +1,9 @@
 """Fixtures partagees : petits logs d'evenements construits a la main.
 
-Les tests n'utilisent jamais BPI2019 ni l'API NYC 311 : ils travaillent sur des
-logs miniatures dont on connait la reponse attendue a l'avance. C'est ce qui
-permet de verifier la logique - et non de simplement constater qu'elle tourne.
+Les tests n'utilisent jamais le dataset BPI2019 complet : ils travaillent sur
+des logs miniatures dont on connait la reponse attendue a l'avance. C'est ce
+qui permet de verifier la logique - et non de simplement constater qu'elle
+tourne.
 """
 
 import pandas as pd

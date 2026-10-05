@@ -5,21 +5,23 @@ pm4py==2.7.23.3
 
 # Data engineering
 pandas==3.0.5
+pyarrow==24.0.0  # moteur parquet, requis par pandas.read_parquet (event_log_clean, prefix_dataset)
 
 # Machine learning
 scikit-learn==1.9.0
 xgboost==3.0.5
+shap==0.52.0  # explicabilite (root-cause), voir src/model_explain.py
 
-# Dashboard & visualisation
-streamlit==1.61.1
-plotly==6.9.0
+# Dashboard (API servie au frontend React, voir frontend/)
+fastapi==0.121.0
+uvicorn==0.38.0
+
+# Visualisation du reseau de Petri (pipeline offline, discover_process.py)
 graphviz==0.21
 
 # Utilitaires
-python-dotenv==1.2.2
-requests==2.34.2
-certifi==2026.7.22
 pyyaml==6.0.3
 
 # Tests
 pytest==9.1.1
+httpx==0.28.1  # requis par fastapi.testclient.TestClient (tests/test_api.py)

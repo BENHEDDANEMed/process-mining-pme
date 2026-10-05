@@ -3,4 +3,17 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .git/
-streamlit.log
+
+# Montes en volume par docker-compose.yml, pas copies dans l'image
+data/
+models/
+
+# Reconstruits pendant le build (stage frontend), pas necessaires dans le contexte
+frontend/node_modules/
+frontend/dist/
+
+# Sans rapport avec l'image du dashboard
+rapport_stage/
+reports/
+powerbi_export/
+logs/

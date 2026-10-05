@@ -3,8 +3,8 @@
 Le score etant une couche de synthese, ces tests ne verifient aucun calcul de
 process mining : ils portent sur la normalisation, la robustesse aux donnees
 manquantes ou aberrantes, et la renormalisation des poids lorsqu'une dimension
-n'est pas disponible - le cas reel du flux NYC 311, qui n'a ni conformance
-checking ni modele de prediction.
+n'est pas disponible - le cas d'un processus qui n'a ni conformance checking
+ni modele de prediction entraine.
 """
 
 import math
@@ -171,7 +171,7 @@ def test_score_global_est_la_moyenne_ponderee_attendue(cfg, kpis_complets):
 
 
 def test_dimensions_absentes_exclues_et_poids_renormalises(cfg, kpis_complets):
-    """Cas reel du flux NYC 311 : ni conformance, ni modele de prediction."""
+    """Processus sans conformance checking ni modele de prediction entraine."""
     partiels = {k: v for k, v in kpis_complets.items()
                 if k not in {"deviation_rate", "high_delay_risk_rate"}}
 

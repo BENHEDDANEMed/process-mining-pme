@@ -28,6 +28,7 @@ soit sous le niveau du hasard) :
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
+from sklearn.metrics import precision_recall_curve
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 from xgboost import XGBClassifier, XGBRegressor
@@ -250,6 +251,41 @@ def add_late_labels(train_df: pd.DataFrame, test_df: pd.DataFrame):
     return train_df, test_df, threshold
 
 
+TARGET_RECALL_LATE = 0.80
+
+
+def pick_decision_threshold(
+    train_df, feature_cols, class_to_idx, classifier_kwargs, target_recall: float = TARGET_RECALL_LATE,
+) -> tuple[float, float, float]:
+    """Seuil de decision (probabilite LATE) le plus eleve qui atteint encore
+    `target_recall` sur la classe LATE (donc la precision maximale a ce niveau
+    de rappel), choisi sur une tranche de validation temporelle decoupee dans
+    le train (jamais le test) : evite a la fois la fuite vers le test et le
+    biais d'evaluer sur des lignes qui ont deja servi a l'entrainement.
+
+    Priorise le rappel plutot que le F1 : pour une PME, rater un vrai retard
+    (silencieux, decouvert trop tard pour agir) coute plus cher qu'une fausse
+    alerte (verification manuelle rapide) -- c'est deja le sens du
+    scale_pos_weight applique au classifieur, et du Health Score qui designe
+    le risque de retard comme le point a surveiller en priorite.
+    """
+    fit_df, val_df = temporal_train_test_split(train_df, test_size=0.2)
+    y_fit = fit_df["outcome"].map(class_to_idx)
+    y_val = val_df["outcome"].map(class_to_idx)
+
+    probe = build_pipeline(XGBClassifier(**classifier_kwargs))
+    probe.fit(fit_df[feature_cols], y_fit)
+    proba_val = probe.predict_proba(val_df[feature_cols])[:, class_to_idx["LATE"]]
+
+    precision, recall, thresholds = precision_recall_curve(y_val, proba_val)
+    meets_target = recall[:-1] >= target_recall  # dernier point de precision/recall n'a pas de seuil associe
+    if not meets_target.any():
+        best_idx = int(np.argmax(recall[:-1]))  # cible hors de portee : meilleur rappel possible
+    else:
+        best_idx = int(np.max(np.flatnonzero(meets_target)))  # seuil le + eleve atteignant la cible -> precision max
+    return float(thresholds[best_idx]), float(precision[best_idx]), float(recall[best_idx])
+
+
 def build_pipeline(model) -> Pipeline:
     preprocessor = ColumnTransformer([
         ("cat", OneHotEncoder(handle_unknown="ignore", min_frequency=20), FEATURE_COLS_CAT),
@@ -286,17 +322,26 @@ def main() -> None:
 
     n_neg, n_pos = int((y_train_clf == 0).sum()), int((y_train_clf == 1).sum())
     scale_pos_weight = n_neg / max(n_pos, 1)
-
-    clf_pipeline = build_pipeline(XGBClassifier(
+    clf_kwargs = dict(
         n_estimators=400, max_depth=7, learning_rate=0.08,
         subsample=0.8, colsample_bytree=0.8, min_child_weight=5,
         reg_lambda=1.5, scale_pos_weight=scale_pos_weight,
         eval_metric="auc", random_state=RANDOM_STATE, n_jobs=-1,
-    ))
+    )
+
+    decision_threshold, val_precision, val_recall = pick_decision_threshold(
+        train_df, feature_cols, class_to_idx, clf_kwargs
+    )
+    print(f"Seuil de decision (proba LATE) retenu par validation temporelle : {decision_threshold:.3f} "
+          f"(cible rappel >= {TARGET_RECALL_LATE:.0%} ; obtenu sur la validation : "
+          f"precision {val_precision:.3f}, rappel {val_recall:.3f})")
+
+    clf_pipeline = build_pipeline(XGBClassifier(**clf_kwargs))
     clf_pipeline.fit(X_train, y_train_clf)
     joblib.dump(
         {"pipeline": clf_pipeline, "classes": classes,
-         "late_threshold_hours": threshold, "feature_cols": feature_cols},
+         "late_threshold_hours": threshold, "decision_threshold": decision_threshold,
+         "feature_cols": feature_cols},
         CLASSIFIER_PATH,
     )
     print(f"Classifieur sauvegarde : {CLASSIFIER_PATH}")

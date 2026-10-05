@@ -31,8 +31,9 @@ Permet de :
 | PM4Py | Extraction, decouverte du processus, conformance checking, analyse de performance |
 | Scikit-Learn | Pipeline de features, split train/test |
 | XGBoost | Classification (risque de retard) et regression (temps restant) |
-| Streamlit | Dashboard interactif (6 vues) |
-| Docker | Conteneurisation, un seul conteneur |
+| FastAPI | API servant les KPI/predictions au dashboard |
+| React (Vite) | Dashboard interactif (5 vues) |
+| Docker | Conteneurisation, un seul conteneur (build multi-etapes) |
 
 ### Licences
 
@@ -43,10 +44,10 @@ Permet de :
 
 ### Decision d'architecture
 
-Un seul conteneur Streamlit + PM4Py + XGBoost (pas de backend API separe : usage en
-analyse de lot, pas de temps reel ni multi-clients). Les modeles (`process_model.pnml`,
+Un seul conteneur : API FastAPI + dashboard React buildé, servis par le meme
+processus (pas de CORS, pas de service separe). Les modeles (`process_model.pnml`,
 `xgboost_classifier.pkl`, `xgboost_regressor.pkl`) sont **entraines hors du conteneur**
-puis montes en volume ; le conteneur ne fait que les charger pour servir le dashboard.
+puis montes en volume ; le conteneur ne fait que les charger pour servir l'API.
 
 ### Positionnement
 
@@ -106,78 +107,12 @@ L'evaluation rapporte le ROC AUC et le rappel sur la classe en retard en plus de
 l'accuracy : sur un jeu a 73% de cas a l'heure, un modele repondant toujours "a l'heure"
 atteindrait 73% d'accuracy sans detecter le moindre retard.
 
-## Volet complementaire : ingestion d'un flux de donnees vivant (API)
-
-Le dataset BPI Challenge 2019 est un jeu de recherche **fige** : il demontre la
-profondeur d'analyse, mais pas la capacite de la plateforme a traiter des donnees qui
-se renouvellent. Un second volet interroge donc une **API publique reellement vivante**,
-celle des reclamations NYC 311 (Socrata), ou des centaines de tickets sont enregistres
-chaque heure.
-
-Le processus modelise - ouverture -> traitement -> cloture d'une reclamation - est
-structurellement identique a un service client ou un support technique de PME. La seule
-difference avec un deploiement en entreprise est la source : ici une API publique,
-en interne le systeme de ticketing maison.
-
-```bash
-python -m src.live_source     # appel API -> log d'evenements (data/live/)
-python -m src.live_analysis   # process mining sur ce log -> reports/live_process_analysis.md
-```
-
-Les resultats apparaissent dans l'onglet **Flux vivant (API)** du dashboard. Relancer
-`src.live_source` recupere de nouveaux tickets : les chiffres de cet onglet evoluent a
-chaque appel, contrairement aux cinq autres.
-
-### Cle d'API
-
-L'API repond sans authentification, mais avec un quota reduit. Un `app_token` Socrata
-gratuit (https://data.cityofnewyork.us/profile/edit/developer_settings) leve cette
-limite ; le placer dans un fichier `.env` a la racine (non versionne) :
-
-```
-SOCRATA_APP_TOKEN=xxxxxxxx
-```
-
-### Poste avec antivirus interceptant le HTTPS (Avast, etc.)
-
-Certains antivirus (Avast notamment) inspectent le trafic HTTPS en generant une autorite
-de certification locale et en re-signant chaque connexion. Si `python -m src.live_source`
-echoue avec une erreur SSL, c'est le cas de figure : exporter le certificat racine de
-l'antivirus (dans Avast : *Menu > Parametres > Confidentialite/Protection > Inspection SSL*
-ou equivalent selon la version) et le placer a la racine du projet sous le nom
-`avast-root.crt`. Ce fichier est propre a chaque machine et volontairement exclu du depot
-(voir `.gitignore`) : personne d'autre n'a besoin du meme fichier, et il ne fonctionnerait
-pas sur un autre poste de toute facon. Sans antivirus de ce type, cette etape ne se
-declenche jamais - `build_session()` (`src/live_source.py`) ne l'utilise qu'en repli, apres
-avoir constate que la connexion standard echoue.
-
-### Fenetre de recuperation
-
-`python -m src.live_source` recupere les tickets crees dans les 14 derniers jours
-(`DEFAULT_WINDOW_DAYS`), plafonnes a 20 000 (`DEFAULT_FETCH_LIMIT`) - une fenetre
-temporelle explicite plutot qu'un "top N" dont le volume reel depend du rythme de
-creation de tickets le jour de l'appel. Contrairement a un filtre qui ne garderait que
-les tickets deja clotures, les tickets encore ouverts restent inclus : c'est ce qui
-permet au taux de cloture (`closure_rate`) de rester un KPI significatif plutot que
-trivialement egal a 100%.
-
-### Un resultat de qualite de donnees
-
-Le champ `resolution_action_updated_date` de l'API est un horodatage de **derniere
-modification**, pas une etape garantie du cycle de vie : sur un instantane verifie le
-2026-09-02, 31% de ses valeurs precedaient la creation meme du ticket. `to_event_log()`
-(`src/live_source.py`) ecarte desormais ces evenements plutot que de produire des
-variantes incoherentes du type `Resolution Action Updated -> Service Request Created`.
-Le voir survenir quelques secondes *apres* `closed_date` reste en revanche normal (memes
-transaction de cloture cote NYC) et n'est pas filtre. C'est un resultat en soi - le
-process mining rend visible un defaut de qualite de donnees qu'un tableau de bord agrege
-classique masquerait entierement.
-
 ## Une plateforme generique, pas un script sur un dataset
 
-Le coeur de l'analyse (`src/process_metrics.py`) ne connait ni BPI2019 ni NYC 311 :
-il raisonne en "cas", "activite" et "horodatage". Un fichier YAML dans `config/`
-fait le lien entre ces concepts et les colonnes reelles d'un log donne.
+Le coeur de l'analyse (`src/process_metrics.py`) ne connait pas les colonnes de
+BPI2019 en dur : il raisonne en "cas", "activite" et "horodatage". Un fichier
+YAML dans `config/` fait le lien entre ces concepts et les colonnes reelles
+d'un log donne.
 
 ```yaml
 # config/bpi2019.yaml (extrait)
@@ -192,50 +127,36 @@ terminal_activities:
 
 Consequence pour une PME : brancher un nouveau processus - tickets support, commandes,
 dossiers RH - se fait en ecrivant une dizaine de lignes de YAML, **sans toucher au code**.
-C'est exactement ce que fait `config/nyc311.yaml` : les deux processus, aux colonnes et
-aux activites totalement differentes, sont analyses par les memes fonctions.
+La plateforme est validee ici sur un seul processus (BPI2019), mais aucune fonction
+d'analyse ne depend de son schema de colonnes particulier.
 
 ```bash
-python -m src.performance_analysis                 # processus par defaut
-python -m src.performance_analysis --config nyc311 # autre processus, meme code
+python -m src.performance_analysis   # processus par defaut (bpi2019)
 ```
 
 ### Tests
 
 ```bash
-python -m pytest tests/ -q     # 36 tests
+python -m pytest tests/ -q     # 76 tests
 ```
 
 Les tests portent en priorite sur ce qui avait deja casse : la censure temporelle, la
 fuite de donnees entre train et test, et la robustesse du comptage de variantes a
 l'ordre des lignes. Ils tournent sur des logs miniatures construits a la main, dont la
-reponse attendue est connue a l'avance - jamais sur BPI2019 ni sur l'API.
+reponse attendue est connue a l'avance - jamais sur BPI2019 directement.
 
-## Automatisation
+## Regeneration des analyses
 
-Un orchestrateur enchaine les etapes a rejouer periodiquement et journalise chaque
-execution dans `logs/refresh.log` :
+Un script enchaine conformite, performance, KPI metier et export Power BI en une
+commande, pratique apres une modification du journal nettoye ou de la configuration :
 
 ```bash
-python -m src.refresh                # flux API + analyse du flux (rapide)
-python -m src.refresh --scope full   # + export Power BI (NYC), conformite, performance, KPI, export Power BI (BPI2019)
+python -m src.refresh
 ```
 
-Planification quotidienne sous Windows :
-
-```powershell
-.\scripts\register_refresh_task.ps1
-```
-
-**Frequence assumee : une fois par jour.** L'API NYC 311 publie ses donnees avec environ
-48 h de decalage (verifie a l'execution) : rafraichir plus souvent ne rapporterait
-aucune donnee nouvelle tout en consommant du quota. Le flux se renouvelle donc a un
-rythme journalier, pas en temps reel.
-
-L'entrainement des modeles ML n'est volontairement pas automatise : il est couteux et
-n'a pas a etre refait a chaque rafraichissement. Le relancer manuellement lors d'une
-reevaluation periodique - c'est aussi l'occasion de verifier que le seuil de retard et
-la fenetre de censure restent pertinents sur les donnees recentes.
+L'entrainement des modeles ML n'est volontairement pas inclus : il est couteux et
+n'a pas a etre refait a chaque regeneration. Le relancer manuellement
+(`python -m src.train_model`) lors d'une reevaluation periodique.
 
 ## Process Health Score
 
@@ -246,7 +167,6 @@ deja produits, il n'en recalcule aucun.
 
 ```bash
 python -m src.process_health                    # processus par defaut
-python -m src.process_health --config nyc311 --kpis data/live/live_kpi_summary.json
 ```
 
 | Dimension | Mesure | Poids |
@@ -257,20 +177,21 @@ python -m src.process_health --config nyc311 --kpis data/live/live_kpi_summary.j
 | Rework | taux de rework moyen | 15% |
 | Charge ressources | part des evenements de la ressource la plus chargee | 15% |
 
-**Des metriques sans echelle.** Un dossier BPI2019 dure 64 jours en mediane, un ticket
-NYC 311 neuf minutes : aucun seuil en heures ne peut servir les deux. Chaque dimension
-est donc un *ratio*, ce qui rend le score comparable d'un processus a l'autre.
+**Des metriques sans echelle.** Un futur processus branche via son propre YAML pourrait
+avoir des durees de cas sans rapport avec celles de BPI2019 : aucun seuil en heures ne
+peut donc servir tous les processus. Chaque dimension est un *ratio*, ce qui rend le
+score comparable d'un processus a l'autre.
 
 **Dimensions manquantes.** Une dimension dont le KPI source est absent est ecartee -
 jamais remplacee par une valeur inventee - et les poids restants sont renormalises a 1.
-Le flux NYC 311 l'illustre : sans conformance checking ni modele de prediction, son
-score porte sur trois dimensions, avec des poids ramenes de 0.55 a 1. Le chemin des
-predictions vient du YAML (`artifacts.predictions`) et non d'une constante, pour qu'un
-processus sans modele n'herite pas des predictions d'un autre dataset.
+Un processus sans conformance checking ni modele de prediction verrait par exemple son
+score porter sur les trois dimensions restantes, avec leurs poids ramenes a 1. Le chemin
+des predictions vient du YAML (`artifacts.predictions`) et non d'une constante, pour
+qu'un processus sans modele n'herite pas des predictions d'un autre dataset.
 
 Les poids et les seuils sont configurables par processus dans `config/*.yaml`. Le detail
-complet (normalisation, justification des poids, limites) est dans
-`PROJECT_DOCUMENTATION.md`, section 8.
+complet (normalisation, justification des poids, limites) est documente dans le rapport de
+stage associe a ce projet, non inclus dans ce depot.
 
 **Limite assumee** : le rapport p90/mediane mesure la *regularite* des durees, pas la
 vitesse absolue - un processus uniformement lent mais previsible obtient un bon score
@@ -284,11 +205,9 @@ process-mining-pme-v2/
 ├── data/
 │   ├── raw/
 │   │   └── bpi_challenge_2019.xes
-│   ├── processed/
-│   │   ├── event_log_raw.parquet
-│   │   └── event_log_clean.parquet
-│   ├── live/                    # Instantanes du flux API (regeneres a chaque appel)
-│   └── legacy_bpi2012/          # dataset ecarte apres audit (conserve pour reference)
+│   └── processed/
+│       ├── event_log_raw.parquet
+│       └── event_log_clean.parquet
 ├── models/
 │   ├── process_model.pnml
 │   ├── conformance_report.csv
@@ -302,22 +221,22 @@ process-mining-pme-v2/
 ├── reports/
 │   ├── dataset_audit_bpi2012.md
 │   ├── dataset_audit_bpi2019.md
-│   ├── process_analysis.md      # KPI + recommandations metier (BPI2019)
-│   └── live_process_analysis.md # KPI + variantes du flux vivant (NYC 311)
+│   └── process_analysis.md      # KPI + recommandations metier (BPI2019)
 ├── config/                      # Un fichier YAML = un processus analysable
-│   ├── bpi2019.yaml
-│   └── nyc311.yaml
-├── tests/                       # 36 tests pytest
-├── scripts/
-│   └── register_refresh_task.ps1  # Planification quotidienne (Windows)
-├── logs/                        # Journal des rafraichissements
-├── .streamlit/
-│   └── config.toml              # Theme du dashboard
+│   └── bpi2019.yaml
+├── tests/                       # 76 tests pytest
+├── logs/                        # Journal des regenerations
+├── backend/
+│   └── api.py                   # API FastAPI (sert le dashboard React + KPI/predictions)
+├── frontend/                    # Dashboard React (Vite + Tailwind + Recharts)
+│   └── src/
+│       ├── views/                # Vue d'ensemble, Processus, Conformite, Prediction, Recommandations
+│       └── components/           # Card, StatCard, HBarChart, Histogram, Table...
 ├── src/
 │   ├── config.py                # Chargement de la configuration d'un processus
 │   ├── process_metrics.py       # Metriques process mining, independantes du dataset
 │   ├── process_health.py        # Process Health Score (synthese des KPI existants)
-│   ├── refresh.py               # Orchestrateur des etapes periodiques
+│   ├── refresh.py               # Regenere conformite/performance/KPI/export en une commande
 │   ├── audit_dataset.py         # Audit generique d'un event log XES
 │   ├── extract_log.py           # Phase 1 - XES -> DataFrame
 │   ├── preprocess.py            # Phase 1 - nettoyage + stats descriptives
@@ -327,13 +246,8 @@ process-mining-pme-v2/
 │   ├── business_analysis.py     # Phase 3 - KPI + recommandations metier
 │   ├── train_model.py           # Phase 4 - feature engineering + XGBoost x2
 │   ├── evaluate_model.py        # Phase 4 - metriques des 2 modeles
-│   ├── export_powerbi.py        # Phase 5 - export CSV pour Power BI (BPI2019)
-│   ├── export_powerbi_live.py   # Phase 5 - export CSV pour Power BI (NYC 311)
-│   ├── live_source.py           # Volet API - ingestion du flux NYC 311
-│   └── live_analysis.py         # Volet API - process mining sur le flux
-├── powerbi_export/              # Tables CSV + README d'import Power BI (BPI2019)
-├── powerbi_export_live/         # Tables CSV pour Power BI (NYC 311)
-├── app.py                       # Phase 5 - dashboard Streamlit (6 vues)
+│   └── export_powerbi.py        # Phase 5 - export CSV pour Power BI
+├── powerbi_export/              # Tables CSV + README d'import Power BI
 ├── requirements.txt
 ├── Dockerfile
 └── docker-compose.yml
@@ -355,10 +269,18 @@ python -m src.business_analysis
 python -m src.train_model
 python -m src.evaluate_model
 
-streamlit run app.py
+# Dashboard : build le frontend une fois, puis lance l'API qui le sert
+cd frontend && npm install && npm run build && cd ..
+uvicorn backend.api:app --port 8000
 ```
 
-Export des donnees vers Power BI (alternative au dashboard Streamlit) :
+Dashboard accessible sur http://localhost:8000.
+
+En developpement, `cd frontend && npm run dev` lance un serveur Vite a chaud sur
+http://localhost:5173, avec un proxy vers `uvicorn backend.api:app --port 8000`
+pour les appels `/api/*` (voir `frontend/vite.config.js`).
+
+Export des donnees vers Power BI (alternative au dashboard) :
 
 ```bash
 python -m src.export_powerbi
@@ -368,19 +290,6 @@ Puis, dans Power BI Desktop : *Obtenir les donnees > Texte/CSV* pour chaque fich
 `powerbi_export/`. Le detail des tables, des relations a creer et des visuels suggeres
 est dans `powerbi_export/README.md`.
 
-Meme export pour le flux vivant NYC 311 (necessite d'avoir execute `src.live_source`
-au moins une fois) :
-
-```bash
-python -m src.export_powerbi_live
-```
-
-Produit `powerbi_export_live/` : `fact_cases.csv`, `dim_bottlenecks.csv`, `dim_rework.csv`,
-`dim_resources.csv`, `dim_variants.csv`, `kpi_overview.csv`. Contrairement a
-`export_powerbi.py` (specifique a BPI2019 : attributs Purchase-to-Pay, predictions ML),
-ce script appelle directement `src/process_metrics.py` avec `config/nyc311.yaml` - aucune
-metrique n'est reimplementee, seule la configuration change.
-
 Audit prealable d'un dataset (optionnel, deja execute pour BPI2012 et BPI2019) :
 
 ```bash
@@ -389,26 +298,36 @@ python -m src.audit_dataset --xes data/raw/bpi_challenge_2019.xes --name bpi2019
 
 ## Utilisation (Docker)
 
-Les etapes ci-dessus (jusqu'a `evaluate_model.py`) doivent avoir ete executees au moins
-une fois en local pour generer `data/` et `models/`, ensuite :
-
 ```bash
 docker-compose up --build
 ```
 
-Dashboard accessible sur http://localhost:8501.
+Dashboard accessible sur http://localhost:8000.
 
-## Dashboard (6 vues)
+Le conteneur ne fait que *charger* des artefacts deja calcules (`models/`, `data/processed/`),
+il ne les entraine pas : l'entrainement est une operation ponctuelle et couteuse, volontairement
+laissee hors du conteneur.
+
+- **Si ces artefacts sont fournis** (cas d'une livraison packagee) : la commande ci-dessus
+  suffit, rien d'autre a executer.
+- **Si le depot a ete clone sans eux** (ils sont exclus par `.gitignore` car volumineux) :
+  executer d'abord le pipeline local decrit plus haut, jusqu'a `src.evaluate_model`.
+
+## Dashboard (6 onglets)
 
 1. **Vue d'ensemble** : Process Health Score, KPI principaux, distribution des durees,
    activites frequentes.
-2. **Processus** : modele decouvert (Inductive Miner), top variantes.
-3. **Conformite & Performance** : fitness/precision, cas deviants, goulots d'etranglement,
+2. **Processus > Decouverte** : modele decouvert (Inductive Miner), top variantes.
+3. **Processus > Variantes** : table des 20 variantes les plus frequentes (frequence, duree,
+   rework, conformite), detail d'une variante et lien vers les cas concernes.
+4. **Conformite & Performance** : fitness, cas deviants, goulots d'etranglement,
    rework, charge par ressource.
-4. **Prediction** : risque de retard et temps restant estime pour un cas donne.
-5. **Recommandations** : problemes detectes, impact chiffre, recommandations d'amelioration.
-6. **Flux vivant (API)** : meme chaine d'analyse appliquee a une source de donnees
-   qui se renouvelle reellement (API publique NYC 311).
+5. **Prediction > Cas courant** : risque de retard et temps restant estime pour un cas et une
+   etape donnes, avec explication SHAP de chaque facteur et analyse des causes probables.
+6. **Prediction > Monitoring** : repartition du portefeuille par niveau de risque et
+   trajectoire du risque d'un cas a travers ses etapes.
+7. **Explorateur de cas** : recherche d'un dossier precis, detail et chronologie des evenements.
+8. **Recommandations** : problemes detectes, impact chiffre, recommandations d'amelioration.
 
 ## Dataset
 

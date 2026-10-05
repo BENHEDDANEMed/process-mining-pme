@@ -2,14 +2,13 @@
 entre activites, rework, charge par ressource.
 
 Ce module ne contient plus de logique de calcul : celle-ci vit dans
-`src/process_metrics.py`, ou elle est ecrite de facon generique et partagee
-avec l'analyse du flux vivant (`src/live_analysis.py`). Ici, on se contente de
-charger le log, d'appliquer ces metriques via la configuration du processus,
-et d'ecrire les rapports.
+`src/process_metrics.py`, ou elle est ecrite de facon generique, parametree
+par la configuration du processus (voir config/bpi2019.yaml) plutot que par
+des noms de colonnes en dur. Ici, on se contente de charger le log,
+d'appliquer ces metriques, et d'ecrire les rapports.
 
 Usage :
     python -m src.performance_analysis                # processus par defaut (bpi2019)
-    python -m src.performance_analysis --config nyc311
 """
 
 from __future__ import annotations

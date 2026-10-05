@@ -1,0 +1,75 @@
+@import "tailwindcss";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/space-mono/400.css";
+@import "@fontsource/space-mono/700.css";
+
+/* Station meteo du processus -- voir le contrat de direction dans index.html */
+@theme {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --color-ground: #0a0f1e;
+  --color-panel: #121a30;
+  --color-panel-raised: #16213f;
+  --color-hairline: #263252;
+
+  --color-ink: #e6ebf5;
+  --color-ink-dim: #8b98b8;
+  --color-ink-faint: #5b688a;
+
+  --color-instrument: #3da9fc;
+  --color-instrument-dim: #1e5fa8;
+
+  --color-good: #10b981;
+  --color-watch: #f59e0b;
+  --color-storm: #ef4444;
+  --color-neutral: #64748b;
+}
+
+@keyframes needle-sweep {
+  from {
+    stroke-dashoffset: var(--sweep-from);
+  }
+  to {
+    stroke-dashoffset: var(--sweep-to);
+  }
+}
+
+@layer base {
+  body {
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: var(--color-instrument-dim);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-instrument);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-ground);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-hairline);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-faint);
+  }
+
+  input[type="range"] {
+    accent-color: var(--color-instrument);
+  }
+}

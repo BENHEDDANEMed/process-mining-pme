@@ -2,21 +2,22 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-streamlit.log
 logs/
 
-# Secrets : token d'API Socrata (voir src/live_source.py)
-.env
+# Dashboard React : reconstruit via npm install / npm run build
+frontend/node_modules/
+frontend/dist/
 
-# Bundle de certificats genere localement (interception SSL du poste)
-certs/
+# Certificat racine local (build Docker derriere un antivirus/proxy qui
+# intercepte le HTTPS) : propre a chaque machine, ne fonctionnerait pas
+# ailleurs. placeholder.crt reste versionne pour que `COPY *.crt` ne casse
+# jamais le build quand aucun certificat reel n'est present.
+docker/certs/*
+!docker/certs/placeholder.crt
 
 # Datasets volumineux : a re-telecharger / regenerer via les scripts src/
 data/raw/*.xes
 data/processed/*.parquet
-data/live/*.parquet
-data/live/*.json
-data/live/*.pnml
 data/legacy_bpi2012/
 
 # Modeles entraines : reproductibles via les scripts src/, pas versionnes
@@ -29,6 +30,30 @@ models/*.png
 
 # Exports generes (volumineux) : regenerables via src/export_powerbi.py
 powerbi_export/*.csv
-powerbi_export_live/*.csv
 powerbi_export.zip
-avast-root.crt
+
+# Artefacts de compilation LaTeX : regeneres par pdflatex + biber
+# (motifs recursifs : pdflatex cree aussi un .aux par chapitre inclus)
+rapport_stage/**/*.aux
+rapport_stage/**/*.bbl
+rapport_stage/**/*.bcf
+rapport_stage/**/*.blg
+rapport_stage/**/*.lof
+rapport_stage/**/*.log
+rapport_stage/**/*.lot
+rapport_stage/**/*.out
+rapport_stage/**/*.run.xml
+rapport_stage/**/*.toc
+rapport_stage/**/*.synctex.gz
+
+# Outils de developpement locaux (caches de session, config machine)
+.claude/settings.local.json
+.remember/
+.impeccable/
+.playwright-mcp/
+
+# Config locale de l'editeur
+.vscode/
+
+# Rapport de stage (document academique, non publie)
+rapport_stage/

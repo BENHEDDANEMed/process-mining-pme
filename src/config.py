@@ -64,6 +64,18 @@ class HealthWeights:
 
 
 @dataclass(frozen=True)
+class RiskThresholds:
+    """Seuils de classement du risque de retard predit (monitoring).
+
+    Un cas est LOW en dessous de `low_max`, HIGH au-dessus de `high_min`,
+    MEDIUM entre les deux.
+    """
+
+    low_max: float = 0.40
+    high_min: float = 0.70
+
+
+@dataclass(frozen=True)
 class ProcessConfig:
     """Description complete d'un processus analysable."""
 
@@ -80,12 +92,13 @@ class ProcessConfig:
     amount_column: str | None
     # Sortie du modele de prediction propre a CE processus, si un modele a ete
     # entraine dessus. Renseigne dans le YAML plutot que code en dur : sans
-    # cela, un processus sans modele (comme le flux NYC 311) se verrait
-    # attribuer les predictions d'un autre dataset.
+    # cela, un processus sans modele entraine se verrait attribuer les
+    # predictions d'un autre dataset.
     predictions_path: str | None = None
     categorical_attributes: list[str] = field(default_factory=list)
     analysis: AnalysisParams = field(default_factory=AnalysisParams)
     health_weights: HealthWeights = field(default_factory=HealthWeights)
+    risk_thresholds: RiskThresholds = field(default_factory=RiskThresholds)
 
     @property
     def core_columns(self) -> list[str]:
@@ -147,6 +160,15 @@ def _from_dict(raw: dict, source: Path | None = None) -> ProcessConfig:
             f"{sorted(unknown_weights)}. Attendues : {sorted(known_weights)}."
         )
 
+    risk_raw = raw.get("risk_thresholds") or {}
+    known_risk = {f for f in RiskThresholds.__dataclass_fields__}
+    unknown_risk = set(risk_raw) - known_risk
+    if unknown_risk:
+        raise ValueError(
+            f"Configuration invalide{origin} : seuil(s) de risque inconnu(s) "
+            f"{sorted(unknown_risk)}. Attendus : {sorted(known_risk)}."
+        )
+
     return ProcessConfig(
         name=raw.get("name", source.stem if source else "sans-nom"),
         label=raw.get("label", raw.get("name", "")),
@@ -161,4 +183,5 @@ def _from_dict(raw: dict, source: Path | None = None) -> ProcessConfig:
         categorical_attributes=list(attributes.get("categorical") or []),
         analysis=AnalysisParams(**analysis_raw),
         health_weights=HealthWeights(**weights_raw),
+        risk_thresholds=RiskThresholds(**risk_raw),
     )

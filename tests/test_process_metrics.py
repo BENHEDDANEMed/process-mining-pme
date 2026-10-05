@@ -4,8 +4,9 @@ import pandas as pd
 import pytest
 
 from src.process_metrics import (
-    bottlenecks, case_durations_hours, case_variants, closed_cases,
-    completed_cases, resource_load, rework_rates, summarize, transition_waits,
+    assign_variant_ids, bottlenecks, case_durations_hours, case_rework_counts,
+    case_variants, closed_cases, completed_cases, resource_load, rework_rates,
+    summarize, transition_waits, variant_table,
 )
 
 
@@ -71,7 +72,7 @@ def test_rework_rates_detecte_les_activites_repetees(simple_log, cfg):
 
 
 def test_closed_cases_reconnait_un_cas_dont_la_cloture_n_est_pas_le_dernier_evenement(cfg):
-    """Robustesse aux horodatages desordonnes (cas reel de l'API NYC 311)."""
+    """Robustesse aux horodatages desordonnes (frequent avec une source externe)."""
     log = pd.DataFrame([
         {"case_id": "x", "activity": "Ouverture",
          "timestamp": pd.Timestamp("2024-01-01", tz="UTC"), "resource": "a", "categorie": "A"},
@@ -119,6 +120,49 @@ def test_summarize_produit_des_indicateurs_coherents(simple_log, cfg):
     assert kpis["closure_rate"] == pytest.approx(2 / 3)
     assert kpis["median_case_duration_hours"] == pytest.approx(48.0)
     assert kpis["n_variants"] == 3
+
+
+def _log_a_variantes() -> pd.DataFrame:
+    """2 cas suivent 'X -> Y', 1 cas suit 'X -> Z' : une variante majoritaire nette."""
+    ligne = lambda case, activite, jour: {
+        "case_id": case, "activity": activite,
+        "timestamp": pd.Timestamp("2024-01-01", tz="UTC") + pd.Timedelta(days=jour),
+        "resource": "a", "categorie": "A",
+    }
+    return pd.DataFrame([
+        ligne("a", "X", 0), ligne("a", "Y", 1),
+        ligne("b", "X", 0), ligne("b", "Y", 1),
+        ligne("c", "X", 0), ligne("c", "Z", 1),
+    ])
+
+
+def test_variant_table_attribue_l_id_1_a_la_variante_la_plus_frequente(cfg):
+    table = variant_table(_log_a_variantes(), cfg).set_index("variant_id")
+
+    assert table.loc[1, "sequence"] == ("X", "Y")
+    assert table.loc[1, "n_cases"] == 2
+    assert set(table.index) == {1, 2}
+
+
+def test_assign_variant_ids_est_coherent_avec_case_variants(cfg):
+    log = _log_a_variantes()
+    ids = assign_variant_ids(log, cfg)
+    counts = case_variants(log, cfg)
+
+    assert set(ids.index) == {"a", "b", "c"}
+    assert ids["a"] == ids["b"]  # meme sequence "X -> Y"
+    assert ids["a"] != ids["c"]  # sequence differente "X -> Z"
+    # Les effectifs par id de variante doivent reproduire ceux de case_variants,
+    # a l'ordre pres (les deux derivent du meme .value_counts()).
+    assert sorted(ids.value_counts().tolist()) == sorted(counts.tolist())
+
+
+def test_case_rework_counts_compte_les_evenements_en_surplus(simple_log, cfg):
+    rework = case_rework_counts(simple_log, cfg)
+
+    assert rework["c1"] == 0  # Ouverture, Traitement, Cloture : rien en double
+    assert rework["c2"] == 1  # Traitement realise deux fois
+    assert rework["c3"] == 0  # cas encore ouvert, pas de repetition
 
 
 def test_summarize_sur_un_seul_cas_ne_divise_pas_par_zero(cfg):

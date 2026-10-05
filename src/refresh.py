@@ -1,29 +1,20 @@
-"""Rafraichissement automatique de la plateforme.
+"""Regenere en une commande les analyses derivees du journal d'evenements.
 
-Enchaine les etapes qui doivent tourner regulierement pour que le dashboard
-reflete des donnees a jour, et journalise chaque execution. Concu pour etre
-declenche par une tache planifiee (Planificateur de taches Windows, cron sous
-Linux) - voir la section "Automatisation" du README.
-
-Deux perimetres :
-
-    --scope live   (defaut) : rappelle l'API et recalcule l'analyse du flux
-                              vivant. Rapide, sans reentrainement.
-    --scope full            : refait aussi conformite, performance et KPI du
-                              processus principal. Plus long.
+Enchaine conformite, performance et KPI metier, puis reexporte les tables
+Power BI. Pratique apres une modification du journal nettoye ou du fichier de
+configuration du processus (config/bpi2019.yaml), sans avoir a relancer
+chaque script a la main.
 
 L'entrainement des modeles ML n'est volontairement pas inclus : il est couteux
-et n'a pas a etre refait a chaque rafraichissement. Le relancer manuellement
+et n'a pas a etre refait a chaque regeneration. Le relancer manuellement
 (`python -m src.train_model`) lors d'une reevaluation periodique.
 
 Usage :
     python -m src.refresh
-    python -m src.refresh --scope full
 """
 
 from __future__ import annotations
 
-import argparse
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -33,22 +24,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 LOG_DIR = BASE_DIR / "logs"
 LOG_PATH = LOG_DIR / "refresh.log"
 
-# Etapes par perimetre. Chaque entree : (module, libelle).
-STEPS = {
-    "live": [
-        ("src.live_source", "Appel de l'API et construction du log d'evenements"),
-        ("src.live_analysis", "Process mining sur le flux vivant"),
-    ],
-    "full": [
-        ("src.live_source", "Appel de l'API et construction du log d'evenements"),
-        ("src.live_analysis", "Process mining sur le flux vivant"),
-        ("src.export_powerbi_live", "Export des tables Power BI (flux vivant)"),
-        ("src.conformance_check", "Verification de conformite"),
-        ("src.performance_analysis", "Analyse de performance"),
-        ("src.business_analysis", "KPI et recommandations metier"),
-        ("src.export_powerbi", "Export des tables Power BI (BPI2019)"),
-    ],
-}
+# Etapes enchainees, dans l'ordre. Chaque entree : (module, libelle).
+STEPS = [
+    ("src.conformance_check", "Verification de conformite"),
+    ("src.performance_analysis", "Analyse de performance"),
+    ("src.business_analysis", "KPI et recommandations metier"),
+    ("src.export_powerbi", "Export des tables Power BI"),
+]
 
 
 def log(message: str) -> None:
@@ -99,7 +81,7 @@ def check_interpreter() -> bool:
     qu'un message clair au demarrage.
     """
     try:
-        import pandas, requests, pm4py  # noqa: F401
+        import pandas, pm4py  # noqa: F401
         return True
     except ImportError as exc:
         log(f"ERREUR : interpreteur incorrect ({sys.executable})")
@@ -110,20 +92,12 @@ def check_interpreter() -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Rafraichissement de la plateforme")
-    parser.add_argument(
-        "--scope", choices=sorted(STEPS), default="live",
-        help="live : flux API seul (defaut) ; full : + conformite, performance, KPI, export",
-    )
-    args = parser.parse_args()
-
     if not check_interpreter():
         return 1
 
-    etapes = STEPS[args.scope]
-    log(f"=== Rafraichissement '{args.scope}' : {len(etapes)} etape(s) ===")
+    log(f"=== Regeneration : {len(STEPS)} etape(s) ===")
 
-    echecs = [libelle for module, libelle in etapes if not run_step(module, libelle)]
+    echecs = [libelle for module, libelle in STEPS if not run_step(module, libelle)]
 
     if echecs:
         log(f"=== Termine avec {len(echecs)} echec(s) : {', '.join(echecs)} ===")

@@ -22,7 +22,6 @@ def test_les_configurations_du_projet_sont_chargeables():
     noms = available_configs()
 
     assert "bpi2019" in noms
-    assert "nyc311" in noms
     for nom in noms:
         assert load_config(nom).case_id
 
@@ -34,15 +33,6 @@ def test_bpi2019_expose_les_colonnes_xes():
     assert cfg.activity == "concept:name"
     assert "Clear Invoice" in cfg.terminal_activities
     assert cfg.core_columns == ["case:concept:name", "concept:name", "time:timestamp"]
-
-
-def test_nyc311_et_bpi2019_decrivent_des_colonnes_differentes():
-    """C'est tout l'objet de la generalisation : deux processus, un seul code."""
-    bpi = load_config("bpi2019")
-    nyc = load_config("nyc311")
-
-    assert bpi.case_id != nyc.case_id
-    assert bpi.terminal_activities != nyc.terminal_activities
 
 
 def test_configuration_inconnue_leve_une_erreur_explicite():
@@ -71,6 +61,27 @@ def test_valeurs_par_defaut_appliquees_si_section_analysis_absente():
     assert cfg.analysis.late_quantile == 0.75
     assert cfg.analysis.min_transition_count == 20
     assert cfg.terminal_activities == []
+
+
+def test_valeurs_par_defaut_de_risk_thresholds():
+    cfg = _from_dict(CONFIG_MINIMALE)
+
+    assert cfg.risk_thresholds.low_max == 0.40
+    assert cfg.risk_thresholds.high_min == 0.70
+
+
+def test_seuil_de_risque_inconnu_est_rejete():
+    faute = dict(CONFIG_MINIMALE, risk_thresholds={"low_maxx": 0.5})
+
+    with pytest.raises(ValueError, match="inconnu"):
+        _from_dict(faute)
+
+
+def test_bpi2019_expose_les_seuils_de_risque():
+    cfg = load_config("bpi2019")
+
+    assert cfg.risk_thresholds.low_max == 0.40
+    assert cfg.risk_thresholds.high_min == 0.70
 
 
 def test_config_est_immuable():

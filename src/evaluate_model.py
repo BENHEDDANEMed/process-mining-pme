@@ -37,29 +37,34 @@ def evaluate_classifier(test_df: pd.DataFrame, feature_cols: list[str]) -> None:
     bundle = joblib.load(CLASSIFIER_PATH)
     pipeline, classes = bundle["pipeline"], bundle["classes"]
     threshold_h = bundle.get("late_threshold_hours")
+    decision_threshold = bundle.get("decision_threshold", 0.5)
     class_to_idx = {c: i for i, c in enumerate(classes)}
+    late = class_to_idx["LATE"]
 
     X_test = test_df[feature_cols]
     y_test = test_df["outcome"].map(class_to_idx)
-    y_pred = pipeline.predict(X_test)
-    y_proba = pipeline.predict_proba(X_test)[:, class_to_idx["LATE"]]
+    y_proba = pipeline.predict_proba(X_test)[:, late]
+    y_pred_default = pipeline.predict(X_test)
+    y_pred_tuned = np.where(y_proba >= decision_threshold, late, 1 - late)
 
     print("=== Classifieur (risque de retard) ===")
     if threshold_h:
         print(f"Seuil de retard : cas dont la duree depasse {threshold_h:.0f} h ({threshold_h / 24:.0f} j)")
-    print(f"Part reelle de LATE dans le test : {(y_test == class_to_idx['LATE']).mean():.1%}")
+    print(f"Part reelle de LATE dans le test : {(y_test == late).mean():.1%}")
     print()
-    print(f"ROC AUC             : {roc_auc_score(y_test, y_proba):.4f}   (0.5 = hasard)")
+    print(f"ROC AUC             : {roc_auc_score(y_test, y_proba):.4f}   (0.5 = hasard, ne depend pas du seuil)")
     print(f"PR AUC (moy. prec.) : {average_precision_score(y_test, y_proba):.4f}")
-    print(f"Accuracy            : {accuracy_score(y_test, y_pred):.4f}")
-    print(f"Balanced accuracy   : {balanced_accuracy_score(y_test, y_pred):.4f}")
-    print(f"F1 (macro)          : {f1_score(y_test, y_pred, average='macro'):.4f}")
     print()
-    late = class_to_idx["LATE"]
-    print("Sur la classe LATE (celle qui interesse le metier) :")
-    print(f"  Precision : {precision_score(y_test, y_pred, pos_label=late):.4f}")
-    print(f"  Rappel    : {recall_score(y_test, y_pred, pos_label=late):.4f}")
-    print()
+
+    for label, y_pred in [("Seuil par defaut (0.5)", y_pred_default),
+                           ("Seuil retenu par validation (" + f"{decision_threshold:.3f})", y_pred_tuned)]:
+        print(f"--- {label} ---")
+        print(f"Accuracy            : {accuracy_score(y_test, y_pred):.4f}")
+        print(f"Balanced accuracy   : {balanced_accuracy_score(y_test, y_pred):.4f}")
+        print(f"F1 (macro)          : {f1_score(y_test, y_pred, average='macro'):.4f}")
+        print(f"Precision (LATE)    : {precision_score(y_test, y_pred, pos_label=late):.4f}")
+        print(f"Rappel (LATE)       : {recall_score(y_test, y_pred, pos_label=late):.4f}")
+        print()
 
     print("Baselines de reference :")
     majority = np.full_like(y_test, y_test.mode()[0])
@@ -67,8 +72,8 @@ def evaluate_classifier(test_df: pd.DataFrame, feature_cols: list[str]) -> None:
           f"rappel LATE {recall_score(y_test, majority, pos_label=late, zero_division=0):.4f}")
     print()
 
-    cm = confusion_matrix(y_test, y_pred)
-    print("Matrice de confusion (lignes = reel, colonnes = predit) :")
+    cm = confusion_matrix(y_test, y_pred_tuned)
+    print("Matrice de confusion au seuil retenu (lignes = reel, colonnes = predit) :")
     print(pd.DataFrame(cm, index=classes, columns=classes))
 
 

@@ -12,9 +12,10 @@ ou commencer si ce n'est pas le cas.
 --------------------------------------------------------------------------
 Principe de conception : des metriques SANS ECHELLE
 --------------------------------------------------------------------------
-Un dossier d'achat BPI2019 dure 64 jours en mediane, un ticket NYC 311 dure
-9 minutes. Aucun seuil exprime en heures ne peut donc servir les deux. Chaque
-dimension est par consequent reduite a un **ratio** interpretable
+Un dossier d'achat BPI2019 dure 64 jours en mediane ; un futur processus
+branche via son propre fichier de configuration (src/config.py) pourrait se
+compter en minutes. Aucun seuil exprime en heures ne peut donc servir les
+deux. Chaque dimension est par consequent reduite a un **ratio** interpretable
 independamment du processus (p90/mediane, part des cas deviants, part des
 evenements traites par la ressource la plus chargee...), ce qui rend le score
 comparable d'un processus a l'autre et conforme a l'architecture generique du
@@ -250,9 +251,9 @@ def load_delay_risk_rate(cfg: ProcessConfig) -> float | None:
     rejouer le modele : le Health Score reste une couche de synthese.
 
     Le chemin vient de `artifacts.predictions` dans le YAML du processus, et
-    non d'une constante : un processus sans modele entraine (le flux NYC 311,
-    par exemple) n'a pas cette cle et renvoie donc None, ce qui ecarte la
-    dimension au lieu de lui appliquer les predictions d'un autre dataset.
+    non d'une constante : un processus sans modele entraine n'a pas cette cle
+    et renvoie donc None, ce qui ecarte la dimension au lieu de lui appliquer
+    les predictions d'un autre dataset.
     """
     if not cfg.predictions_path:
         return None

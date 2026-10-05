@@ -1,17 +1,17 @@
 """Metriques de process mining, independantes de tout dataset.
 
 Toutes les fonctions de ce module prennent une configuration (src/config.py)
-plutot que des noms de colonnes codes en dur : elles s'appliquent donc
-indifferemment au Purchase-to-Pay de BPI2019 ou au flux de reclamations
-NYC 311, et a tout processus qu'une PME viendrait brancher.
+plutot que des noms de colonnes codes en dur : elles s'appliquent donc au
+Purchase-to-Pay de BPI2019 comme a tout processus qu'une PME viendrait
+brancher via son propre fichier de configuration.
 
-C'est ici que vit la logique d'analyse ; les modules `performance_analysis`
-et `live_analysis` ne font que l'appliquer a leur source respective et mettre
-en forme les resultats.
+C'est ici que vit la logique d'analyse ; le module `performance_analysis`
+ne fait que l'appliquer au journal nettoye et mettre en forme les resultats.
 """
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from src.config import ProcessConfig
@@ -23,19 +23,78 @@ def case_durations_hours(df: pd.DataFrame, cfg: ProcessConfig) -> pd.Series:
     return (per_case["max"] - per_case["min"]).dt.total_seconds() / 3600
 
 
-def case_variants(df: pd.DataFrame, cfg: ProcessConfig) -> pd.Series:
-    """Frequence de chaque sequence d'activites observee.
+def case_sequences(df: pd.DataFrame, cfg: ProcessConfig) -> pd.Series:
+    """Sequence d'activites de chaque cas, indexee par identifiant de cas.
 
     Le tri est stable et porte sur (cas, horodatage) : deux evenements
     simultanes dans un meme cas gardent ainsi leur ordre d'origine, ce qui
     rend le comptage de variantes reproductible d'une execution a l'autre.
+
+    Implementee en numpy plutot qu'en `groupby().apply()` : sur ~250k cas,
+    l'appel Python par groupe de `apply()` coute ~55s (mesure), alors que
+    trouver les frontieres de groupe sur le tableau trie puis `np.split`
+    fait le meme travail en ~1s. Un appelant qui a besoin de plusieurs vues
+    derivees (frequences, table de variantes, id par cas) doit calculer les
+    sequences UNE fois et les passer aux `*_from_sequences` ci-dessous
+    plutot que rappeler cette fonction plusieurs fois.
     """
-    return (
-        df.sort_values([cfg.case_id, cfg.timestamp], kind="stable")
-        .groupby(cfg.case_id)[cfg.activity]
-        .apply(tuple)
-        .value_counts()
-    )
+    if len(df) == 0:
+        return pd.Series(dtype=object)
+
+    sorted_df = df.sort_values([cfg.case_id, cfg.timestamp], kind="stable")
+    case_ids = sorted_df[cfg.case_id].to_numpy()
+    activities = sorted_df[cfg.activity].to_numpy()
+
+    boundaries = np.flatnonzero(case_ids[1:] != case_ids[:-1]) + 1
+    chunks = np.split(activities, boundaries)
+    chunk_case_ids = case_ids[np.concatenate(([0], boundaries))]
+    return pd.Series([tuple(c) for c in chunks], index=chunk_case_ids)
+
+
+def variant_counts_from_sequences(sequences: pd.Series) -> pd.Series:
+    return sequences.value_counts()
+
+
+def variant_table_from_sequences(sequences: pd.Series) -> pd.DataFrame:
+    counts = variant_counts_from_sequences(sequences)
+    return pd.DataFrame({
+        "variant_id": range(1, len(counts) + 1),
+        "sequence": counts.index.to_list(),
+        "n_cases": counts.to_numpy(),
+    })
+
+
+def assign_variant_ids_from_sequences(sequences: pd.Series) -> pd.Series:
+    """Identifiant de variante (1 = la plus frequente) pour chaque cas.
+
+    Le classement reutilise `.value_counts()` sur les memes sequences que
+    `variant_counts_from_sequences` : les identifiants restent coherents
+    entre les deux par construction, jamais par coincidence.
+    """
+    rank = {seq: i + 1 for i, seq in enumerate(sequences.value_counts().index)}
+    return sequences.map(rank).rename("variant_id")
+
+
+def case_variants(df: pd.DataFrame, cfg: ProcessConfig) -> pd.Series:
+    """Frequence de chaque sequence d'activites observee."""
+    return variant_counts_from_sequences(case_sequences(df, cfg))
+
+
+def variant_table(df: pd.DataFrame, cfg: ProcessConfig) -> pd.DataFrame:
+    """Table des variantes : identifiant (1 = la plus frequente), sequence, effectif."""
+    return variant_table_from_sequences(case_sequences(df, cfg))
+
+
+def assign_variant_ids(df: pd.DataFrame, cfg: ProcessConfig) -> pd.Series:
+    """Identifiant de variante (1 = la plus frequente) pour chaque cas."""
+    return assign_variant_ids_from_sequences(case_sequences(df, cfg))
+
+
+def case_rework_counts(df: pd.DataFrame, cfg: ProcessConfig) -> pd.Series:
+    """Nombre d'evenements en surplus par cas (au-dela d'une occurrence par activite distincte)."""
+    n_events = df.groupby(cfg.case_id).size()
+    n_distinct = df.groupby(cfg.case_id)[cfg.activity].nunique()
+    return (n_events - n_distinct).rename("rework_count")
 
 
 def transition_waits(df: pd.DataFrame, cfg: ProcessConfig) -> pd.DataFrame:
@@ -120,11 +179,11 @@ def closed_cases(df: pd.DataFrame, cfg: ProcessConfig) -> pd.Index:
     """Cas ayant ATTEINT un etat terminal (l'activite de cloture y figure).
 
     Repond a la question metier "ce dossier a-t-il ete traite ?". Volontairement
-    robuste aux horodatages desordonnes : sur certaines sources, l'evenement de
-    cloture n'est pas le dernier chronologiquement (cf. le champ
-    `resolution_action_updated_date` de l'API NYC 311, qui porte une date de
-    derniere modification et non une etape du cycle de vie). Un ticket clos y
-    resterait donc a tort compte comme ouvert par `completed_cases`.
+    robuste aux horodatages desordonnes : sur certaines sources externes, un
+    champ peut porter une date de derniere modification plutot qu'une etape
+    du cycle de vie, faisant apparaitre l'evenement de cloture avant sa date
+    reelle. Un cas clos y resterait donc a tort compte comme ouvert par
+    `completed_cases`.
     """
     if not cfg.terminal_activities:
         return pd.Index(df[cfg.case_id].unique())

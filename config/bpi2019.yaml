@@ -64,6 +64,13 @@ health_score:
     rework: 0.15
     resource_load: 0.15
 
+# Seuils de bucketing du risque de retard predit (Prediction Monitoring).
+# Au-dessus de high_min, un cas est "HIGH" ; en-dessous de low_max, "LOW" ;
+# entre les deux, "MEDIUM".
+risk_thresholds:
+  low_max: 0.40
+  high_min: 0.70
+
 # Sorties propres a ce processus, consommees par le Process Health Score.
 artifacts:
   # Predictions du classifieur de risque de retard (src/export_powerbi.py).
